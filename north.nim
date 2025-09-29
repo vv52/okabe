@@ -1,22 +1,59 @@
-import std/[strutils, strscans, strformat, algorithm, sequtils]
+import std/[strutils, strscans, strformat, strtabs]
+import std/[algorithm, sequtils, cmdline]
 import stacks
 
+var docs = newStringTable()
+
+proc dump() : void
+docs["."] = "( a -- ) echo a"
+proc peek() : void
+docs["peek"] = "( a -- a ) echo a"
 proc add() : void
+docs["+"] = "( a b -- c ) a + b"
 proc sub() : void
+docs["-"] = "( a b -- c ) a - b"
 proc mul() : void
+docs["*"] = "( a b -- c ) a * b"
 proc dup() : void
+docs["dup"] = "( a -- a a )"
 proc drop() : void
+docs["drop"] = "( a -- )"
 proc rot() : void
+docs["rot"] = "( a b c -- b c a )"
 proc swap() : void
+docs["swap"] = "( a b -- b a )"
 proc over() : void
+docs["over"] = "( a b -- a b a )"
 proc pick() : void
+docs["pick"] = "( a b c 2 -- a b c a )"
 proc tuck() : void
+docs["tuck"] = "( a b -- b a b )"
 proc roll() : void
-proc stackDump() : void
-proc main() : void
+docs["roll"] = "( a b c 2 -- b c a )"
+proc rpush() : void
+docs[">r"] = "( a -- ) r( -- a )"
+proc rpop() : void
+docs["r>"] = "( -- a ) r( a -- )"
+proc stackDump(s : Stack) : void
+proc parseToken(token : string) : void
+proc repl() : void
+proc interpret(file : string) : void
+proc compile(file : string) : void
+
+var debug = false
+var help_mode = false
 
 var stack = newStack[int](capacity = 64)
 var rstack = newStack[int](capacity = 64)
+
+proc help =
+  help_mode = true
+
+proc dump =
+  echo stack.pop()
+
+proc peek =
+  echo stack.peek()
 
 proc add =
   let a = stack.pop()
@@ -86,42 +123,86 @@ proc roll =
       stack.push(item)
     stack.push(newTop)
 
-proc stackDump =
+proc rpush =
+  rstack.push(stack.pop)
+  
+proc rpop =
+  stack.push(rstack.pop)
+  
+proc stackDump(s : Stack) =
   var i : int = 0
-  let stack_dump = stack.toSeq.reversed
-  echo "\ncell | value"
+  let stack_dump = s.toSeq.reversed
+  echo "cell | value"
   for item in stackdump:
     echo fmt"  {i}  |   {$item}"
     i += 1
 
-proc main =
+proc parseToken(token : string) =
+  var x : int
+  if scanf(token, "$i", x):
+    stack.push(x)
+  else:
+    case token.toLowerAscii:
+    of ".": dump()
+    of "+": add()
+    of "-": sub()
+    of "*": mul()
+    of "dup": dup()
+    of "drop": drop()
+    of "rot": rot()
+    of "swap": swap()
+    of "over": over()
+    of "pick": pick()
+    of "tuck": tuck()
+    of "roll": roll()
+    of "peek": peek()
+    of ">r": rpush()
+    of "r>": rpop()
+    of "help": help()
+    else: echo fmt"""ERROR: Unknown word "{token}""""
+
+proc repl =
   var should_end : bool = false
   while not should_end:
     let input : string = readLine(stdin)
     if input != "quit":
       let tokens : seq[string] = input.split(' ')
       for token in tokens:
-        var x : int
-        if scanf(token, "$i", x):
-          stack.push(x)
-        else:
-          case token:
-          of "+": add()
-          of "-": sub()
-          of "*": mul()
-          of "dup": dup()
-          of "drop": drop()
-          of "rot": rot()
-          of "swap": swap()
-          of "over": over()
-          of "pick": pick()
-          of "tuck": tuck()
-          of "roll": roll()
-          echo stack.peek()
+        if token.len > 0:
+          if help_mode:
+            if docs[token] == "":
+              echo fmt"""No help available for "{token}""""
+            else: echo docs[token]
+            help_mode = false
+          else: parseToken(token)
       echo "ok"
-      stackDump()
+      if debug:
+        if not stack.isEmpty:
+          echo "\nSTACK"
+          stackDump(stack)
+        if not rstack.isEmpty:
+          echo "\nRSTACK"
+          stackDump(rstack)
+        echo ""
     else:
       should_end = true
 
+proc interpret(file : string) =
+  echo "TODO: add file interpreter"
+
+proc compile(file : string) =
+  echo "TODO: add file compiler to asm or nim"
+
 if isMainModule:
-  main()
+  let params = commandLineParams()
+  if params.len == 0:
+    repl()
+  elif params.len == 1:
+    case params[0]:
+    of "debug":
+      debug = true
+      repl()
+    else:
+      interpret(params[0])
+  else:
+    echo "TODO: File handling and options"
