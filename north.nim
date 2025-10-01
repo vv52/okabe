@@ -1,5 +1,5 @@
 import std/[strutils, strscans, strformat, strtabs]
-import std/[algorithm, sequtils, cmdline]
+import std/[algorithm, sequtils, cmdline, re]
 import stacks
 
 var docs = newStringTable()
@@ -14,6 +14,12 @@ proc sub() : void
 docs["-"] = "( a b -- c ) a - b"
 proc mul() : void
 docs["*"] = "( a b -- c ) a * b"
+proc divide() : void
+docs["/"] = "( a b -- c ) a / b, floored int"
+proc divmod() : void
+docs["/%"] = "( a b -- c d ) a / b, int and remainder"
+proc modulus() : void
+docs["%"] = "( a b -- c ) a / b, remainder"
 proc dup() : void
 docs["dup"] = "( a -- a a )"
 proc drop() : void
@@ -43,8 +49,16 @@ proc compile(file : string) : void
 var debug = false
 var help_mode = false
 
-var stack = newStack[int](capacity = 64)
-var rstack = newStack[int](capacity = 64)
+var stack = newStack[int](capacity = 16)     # THE stack
+var rstack = newStack[int](capacity = 16)    # rstack for forth algs
+var sstack = newStack[string](capacity = 16) # stack for string literals
+var qstack = newStack[string](capacity = 16) # stack for quoted code in conditionals and processes
+
+# TODO: implement "(", ")", and "proc"
+
+var token_ptr : int = 0
+
+let parse_rule = re"""\s+(?=(?:[^\'"]*[\'"][^\'"]*[\'"])*[^\'"]*$)"""
 
 proc help =
   help_mode = true
@@ -69,6 +83,25 @@ proc mul =
   let a = stack.pop()
   let b = stack.pop()
   stack.push(a * b)
+
+proc divide = 
+  let a = stack.pop()
+  let b = stack.pop()
+  let x = divmod(b, a)
+  stack.push(x[0])
+  
+proc divmod = 
+  let a = stack.pop()
+  let b = stack.pop()
+  let x = divmod(b, a)
+  stack.push(x[1])
+  stack.push(x[0])
+  
+proc modulus = 
+  let a = stack.pop()
+  let b = stack.pop()
+  let x = divmod(b, a)
+  stack.push(x[1])
 
 proc dup =
   stack.push(stack.peek())
@@ -142,32 +175,41 @@ proc parseToken(token : string) =
   if scanf(token, "$i", x):
     stack.push(x)
   else:
-    case token.toLowerAscii:
-    of ".": dump()
-    of "+": add()
-    of "-": sub()
-    of "*": mul()
-    of "dup": dup()
-    of "drop": drop()
-    of "rot": rot()
-    of "swap": swap()
-    of "over": over()
-    of "pick": pick()
-    of "tuck": tuck()
-    of "roll": roll()
-    of "peek": peek()
-    of ">r": rpush()
-    of "r>": rpop()
-    of "help": help()
-    else: echo fmt"""ERROR: Unknown word "{token}""""
+    if token.len > 0:
+      if token[0] == '"':
+        sstack.push(token.strip(chars = {'"'}))
+    else:
+      case token.toLowerAscii:
+      of ".": dump()
+      of "+": add()
+      of "-": sub()
+      of "*": mul()
+      of "/": divide()
+      of "/%": divmod()
+      of "%": modulus()
+      of "dup": dup()
+      of "drop": drop()
+      of "rot": rot()
+      of "swap": swap()
+      of "over": over()
+      of "pick": pick()
+      of "tuck": tuck()
+      of "roll": roll()
+      of "peek": peek()
+      of ">r": rpush()
+      of "r>": rpop()
+      of "help": help()
+      else: echo fmt"""ERROR: Unknown word "{token}""""
 
 proc repl =
   var should_end : bool = false
   while not should_end:
     let input : string = readLine(stdin)
     if input != "quit":
-      let tokens : seq[string] = input.split(' ')
-      for token in tokens:
+      let tokens : seq[string] = input.split(parseRule)
+      token_ptr = 0
+      while token_ptr < tokens.len:
+        let token = tokens[token_ptr]
         if token.len > 0:
           if help_mode:
             if docs[token] == "":
@@ -175,6 +217,7 @@ proc repl =
             else: echo docs[token]
             help_mode = false
           else: parseToken(token)
+        token_ptr += 1
       echo "ok"
       if debug:
         if not stack.isEmpty:
