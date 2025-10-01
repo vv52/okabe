@@ -1,5 +1,6 @@
 import std/[strutils, strscans, strformat, strtabs]
 import std/[algorithm, sequtils, cmdline, re]
+from std/math import divmod
 import stacks
 
 var docs = newStringTable()
@@ -16,7 +17,7 @@ proc mul() : void
 docs["*"] = "( a b -- c ) a * b"
 proc divide() : void
 docs["/"] = "( a b -- c ) a / b, floored int"
-proc divmod() : void
+proc divrem() : void
 docs["/%"] = "( a b -- c d ) a / b, int and remainder"
 proc modulus() : void
 docs["%"] = "( a b -- c ) a / b, remainder"
@@ -90,7 +91,7 @@ proc divide =
   let x = divmod(b, a)
   stack.push(x[0])
   
-proc divmod = 
+proc divrem = 
   let a = stack.pop()
   let b = stack.pop()
   let x = divmod(b, a)
@@ -178,28 +179,28 @@ proc parseToken(token : string) =
     if token.len > 0:
       if token[0] == '"':
         sstack.push(token.strip(chars = {'"'}))
-    else:
-      case token.toLowerAscii:
-      of ".": dump()
-      of "+": add()
-      of "-": sub()
-      of "*": mul()
-      of "/": divide()
-      of "/%": divmod()
-      of "%": modulus()
-      of "dup": dup()
-      of "drop": drop()
-      of "rot": rot()
-      of "swap": swap()
-      of "over": over()
-      of "pick": pick()
-      of "tuck": tuck()
-      of "roll": roll()
-      of "peek": peek()
-      of ">r": rpush()
-      of "r>": rpop()
-      of "help": help()
-      else: echo fmt"""ERROR: Unknown word "{token}""""
+      else:
+        case token.toLowerAscii:
+        of ".": dump()
+        of "+": add()
+        of "-": sub()
+        of "*": mul()
+        of "/": divide()
+        of "/%": divrem()
+        of "%": modulus()
+        of "dup": dup()
+        of "drop": drop()
+        of "rot": rot()
+        of "swap": swap()
+        of "over": over()
+        of "pick": pick()
+        of "tuck": tuck()
+        of "roll": roll()
+        of "peek": peek()
+        of ">r": rpush()
+        of "r>": rpop()
+        of "help": help()
+        else: echo fmt"""ERROR: Unknown word "{token}""""
 
 proc repl =
   var should_end : bool = false
