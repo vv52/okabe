@@ -1,0 +1,8 @@
+"cubed" ( dup dup * * ) proc
+2 cubed .
+
+( dup dup * * )
+2 ex1 .
+
+( dup dup * * ) defer
+2 dex .
