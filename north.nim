@@ -41,6 +41,10 @@ proc rpush() : void
 docs[">r"] = "( a -- ) r( -- a )"
 proc rpop() : void
 docs["r>"] = "( -- a ) r( a -- )"
+proc quote() : void
+docs["("] = "begin storing code for later execution; terminates at matched ')'"
+proc word() : void
+docs["proc"] = "$( s -- ) ()( q -- ) make new word from top of string stack that does top of qstack"
 proc stackDump(s : Stack) : void
 proc parseToken(token : string) : void
 proc repl() : void
@@ -55,7 +59,9 @@ var rstack = newStack[int](capacity = 16)    # rstack for forth algs
 var sstack = newStack[string](capacity = 16) # stack for string literals
 var qstack = newStack[string](capacity = 16) # stack for quoted code in conditionals and processes
 
-# TODO: implement "(", ")", and "proc"
+var buffer : seq[string]
+
+var procs = newStringTable()
 
 var token_ptr : int = 0
 
@@ -65,10 +71,16 @@ proc help =
   help_mode = true
 
 proc dump =
-  echo stack.pop()
+  if stack.isEmpty():
+    echo: "ERROR: nothing on stack to pop"
+  else:
+    echo stack.pop()
 
 proc peek =
-  echo stack.peek()
+  if stack.isEmpty():
+    echo: "ERROR: nothing on stack to peek"
+  else:
+    echo stack.peek()
 
 proc add =
   let a = stack.pop()
@@ -158,11 +170,36 @@ proc roll =
     stack.push(newTop)
 
 proc rpush =
-  rstack.push(stack.pop)
+  if stack.isEmpty():
+    echo: "ERROR: nothing on stack to pop"
+  else:
+    rstack.push(stack.pop)
   
 proc rpop =
-  stack.push(rstack.pop)
+  if rstack.isEmpty():
+    echo: "ERROR: nothing on rstack to pop"
+  else:
+    stack.push(rstack.pop)
   
+proc quote =
+  echo "("
+  token_ptr += 1
+  var quoted = """"""
+  while buffer[token_ptr] != ")":
+    echo buffer[token_ptr]
+    if buffer[token_ptr].len > 0:
+      # if token == "(": quote()
+      # else: quoted += token + " "
+      quoted = fmt"""{quoted}{buffer[token_ptr]} """
+      echo quoted
+    token_ptr += 1
+  qstack.push(quoted)
+  echo quoted
+
+proc word =
+  echo "TODO: run this instead of printing it"
+  echo qstack.pop
+
 proc stackDump(s : Stack) =
   var i : int = 0
   let stack_dump = s.toSeq.reversed
@@ -199,6 +236,8 @@ proc parseToken(token : string) =
         of "peek": peek()
         of ">r": rpush()
         of "r>": rpop()
+        of "(": quote()
+        of "proc": word()
         of "help": help()
         else: echo fmt"""ERROR: Unknown word "{token}""""
 
@@ -208,6 +247,7 @@ proc repl =
     let input : string = readLine(stdin)
     if input != "quit":
       let tokens : seq[string] = input.split(parseRule)
+      buffer = tokens
       token_ptr = 0
       while token_ptr < tokens.len:
         let token = tokens[token_ptr]
