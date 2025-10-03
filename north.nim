@@ -43,9 +43,30 @@ proc rpop() : void
 docs["r>"] = "( -- a ) r( a -- )"
 proc quote() : void
 docs["("] = "begin storing code for later execution; terminates at matched ')'"
+proc exn() : void
+docs["exn"] = ("q( q -- q ) peek qstack and execute quote")
+proc ex1() : void
+docs["ex1"] = ("q( q -- ) pop qstack and execute quote")
+proc exc() : void
+docs["exc"] = ("q( q -- ) drop qstack and discard quote")
+proc deferex() : void
+docs["defer"] = ("q( q -- ) dreg[q] pop qstack and push to dreg")
+proc dex() : void
+docs["dex"] = ("execute quote in dreg")
+proc question() : void
+docs["?"] = ("( b -- ) q( q -- ) pop stack, pop qstack; if greater than 0, execute quote, otherwise discard")
+proc questionelse() : void
+docs["?:"] = ("( b -- ) q( q q -- ) pop stack; if greater than 0, qswap qpop execute qdrop, otherwise qpop execute qdrop")
+proc gt0() : void
+docs["gt0"] = ("( a -- a b ) if a is greater than 0, b is 1, otherwise b is 0")
+proc lt0() : void
+docs["lt0"] = ("( a -- a b ) if a is less than 0, b is 1, otherwise b is 0")
+proc eq0() : void
+docs["eq0"] = ("( a -- a b ) if a is equal to 0, b is 1, otherwise b is 0")
 proc word() : void
 docs["proc"] = "$( s -- ) ()( q -- ) make new word from top of string stack that does top of qstack"
 proc stackDump(s : Stack) : void
+proc executeQuote(q : string) : void
 proc parseToken(token : string) : void
 proc repl() : void
 proc interpret(file : string) : void
@@ -59,6 +80,7 @@ var rstack = newStack[int](capacity = 16)    # rstack for forth algs
 var sstack = newStack[string](capacity = 16) # stack for string literals
 var qstack = newStack[string](capacity = 16) # stack for quoted code in conditionals and processes
 
+var dreg : string
 var buffer : seq[string]
 
 var procs = newStringTable()
@@ -182,23 +204,65 @@ proc rpop =
     stack.push(rstack.pop)
   
 proc quote =
-  echo "("
   token_ptr += 1
   var quoted = """"""
   while buffer[token_ptr] != ")":
-    echo buffer[token_ptr]
     if buffer[token_ptr].len > 0:
-      # if token == "(": quote()
-      # else: quoted += token + " "
-      quoted = fmt"""{quoted}{buffer[token_ptr]} """
-      echo quoted
+      if buffer[token_ptr] == "(": quote()
+      else: quoted = fmt"""{quoted}{buffer[token_ptr]} """
     token_ptr += 1
   qstack.push(quoted)
-  echo quoted
+
+proc exn =
+  if not qstack.isEmpty:
+    executeQuote(qstack.peek)
+
+proc ex1 =
+  if not qstack.isEmpty:
+    executeQuote(qstack.pop)
+
+proc exc =
+  if not qstack.isEmpty:
+    discard qstack.pop
+
+proc deferex =
+  if not qstack.isEmpty:
+    dreg = qstack.pop
+
+proc dex =
+  executeQuote(dreg)
+
+proc question =
+  if stack.pop > 0:
+    executeQuote(qstack.pop)
+  else:
+    discard qstack.pop
+
+proc questionelse =
+  if stack.pop > 0:
+    discard qstack.pop
+    executeQuote(qstack.pop)
+  else:
+    executeQuote(qstack.pop)
+    discard qstack.pop
+
+proc gt0 =
+  if stack.peek > 0:
+    stack.push(1)
+  else: stack.push(0)
+
+proc lt0 =
+  if stack.peek < 0:
+    stack.push(1)
+  else: stack.push(0)
+
+proc eq0 =
+  if stack.peek == 0:
+    stack.push(1)
+  else: stack.push(0)
 
 proc word =
-  echo "TODO: run this instead of printing it"
-  echo qstack.pop
+  procs[sstack.pop] = qstack.pop
 
 proc stackDump(s : Stack) =
   var i : int = 0
@@ -207,6 +271,16 @@ proc stackDump(s : Stack) =
   for item in stackdump:
     echo fmt"  {i}  |   {$item}"
     i += 1
+
+proc executeQuote(q : string) =
+  let tokens : seq[string] = q.split(parseRule)
+  buffer = tokens
+  var quote_ptr = 0
+  while quote_ptr < tokens.len:
+    let token = tokens[quote_ptr]
+    if token.len > 0:
+      parseToken(token)
+    quote_ptr += 1
 
 proc parseToken(token : string) =
   var x : int
@@ -237,9 +311,22 @@ proc parseToken(token : string) =
         of ">r": rpush()
         of "r>": rpop()
         of "(": quote()
+        of "exn": exn()
+        of "ex1": ex1()
+        of "exc": exc()
+        of "defer": deferex()
+        of "dex": dex()
+        of "?": question()
+        of "?:": questionelse()
+        of "gt0": gt0()
+        of "lt0": lt0()
+        of "eq0": eq0()
         of "proc": word()
         of "help": help()
-        else: echo fmt"""ERROR: Unknown word "{token}""""
+        else:
+          if procs[token] != "":
+            executeQuote(procs[token])
+          else: echo fmt"""ERROR: Unknown word "{token}""""
 
 proc repl =
   var should_end : bool = false
@@ -267,6 +354,15 @@ proc repl =
         if not rstack.isEmpty:
           echo "\nRSTACK"
           stackDump(rstack)
+        if not sstack.isEmpty:
+          echo "\n$STACK"
+          stackDump(sstack)
+        if not qstack.isEmpty:
+          echo "\nQSTACK"
+          stackDump(qstack)
+        if dreg != "":
+          echo "DREG"
+          echo dreg
         echo ""
     else:
       should_end = true
