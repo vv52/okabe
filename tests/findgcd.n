@@ -1,0 +1,17 @@
+"findgcd" ( >r eq0
+  ( drop r> . )
+  ( dup r> swap % swap findgcd )
+  ?:
+) proc
+
+"GCD of 3 and 2: " $
+3 2 findgcd
+
+"GCD of 3 and 9: " $
+3 9 findgcd
+
+"GCD of 6 and 37: " $
+6 37 findgcd
+
+"GCD of 256 and 16: " $
+256 16 findgcd

@@ -7,8 +7,12 @@ var docs = newStringTable()
 
 proc dump() : void
 docs["."] = "( a -- ) echo a"
-proc peek() : void
-docs["peek"] = "( a -- a ) echo a"
+proc sdump() : void
+docs["$"] = "$( s -- ) echo s"
+proc top() : void
+docs["top"] = "( a -- a ) echo a"
+proc stop() : void
+docs["$top"] = "$( s -- s ) echo s"
 proc add() : void
 docs["+"] = "( a b -- c ) a + b"
 proc sub() : void
@@ -21,14 +25,28 @@ proc divrem() : void
 docs["/%"] = "( a b -- c d ) a / b, int and remainder"
 proc modulus() : void
 docs["%"] = "( a b -- c ) a / b, remainder"
+proc inc() : void
+docs["++"] = "( a -- b ) b is a + 1"
+proc dec() : void
+docs["--"] = "( a -- b ) b is a - 1"
+proc bsl() : void
+docs["<<"] = "( a b -- c ) c is a bitshifted left b times"
+proc bsr() : void
+docs[">>"] = "( a b -- c ) c is a bitshifted right b times"
 proc dup() : void
 docs["dup"] = "( a -- a a )"
+proc sdup() : void
+docs["$dup"] = "$( s -- s s )"
 proc drop() : void
 docs["drop"] = "( a -- )"
+proc sdrop() : void
+docs["$drop"] = "$( s -- )"
 proc rot() : void
 docs["rot"] = "( a b c -- b c a )"
 proc swap() : void
 docs["swap"] = "( a b -- b a )"
+proc sswap() : void
+docs["$swap"] = "$( s t -- t s )"
 proc over() : void
 docs["over"] = "( a b -- a b a )"
 proc pick() : void
@@ -41,11 +59,16 @@ proc rpush() : void
 docs[">r"] = "( a -- ) r( -- a )"
 proc rpop() : void
 docs["r>"] = "( -- a ) r( a -- )"
+proc qpush() : void
+docs[">q"] = "$( s -- ) q( -- q ) pop $stack and push to qstack"
+proc qpop() : void
+docs["q>"] = "q( q -- ) $( -- s ) pop qstack and push to $stack"
 proc quote() : void
 docs["("] = "begin storing code for later execution; terminates at matched ')'"
-proc exn() : void
-docs["exn"] = ("q( q -- q ) peek qstack and execute quote")
-proc ex1() : void
+proc nested() : string
+proc exqtop() : void
+docs["'"] = ("q( q -- q ) peek qstack and execute quote")
+proc exqpop() : void
 docs["ex1"] = ("q( q -- ) pop qstack and execute quote")
 proc exc() : void
 docs["exc"] = ("q( q -- ) drop qstack and discard quote")
@@ -87,182 +110,378 @@ var procs = newStringTable()
 
 var token_ptr : int = 0
 
-let parse_rule = re"""\s+(?=(?:[^\'"]*[\'"][^\'"]*[\'"])*[^\'"]*$)"""
+let parse_rule = re"""\s+(?=(?:[^\"]*[\"][^\"]*[\"])*[^\"]*$)"""
 
 proc help =
   help_mode = true
 
 proc dump =
-  if stack.isEmpty():
-    echo: "ERROR: nothing on stack to pop"
-  else:
+  try:
     echo stack.pop()
+  except:
+    echo: "ERROR: nothing on stack to pop"
 
-proc peek =
-  if stack.isEmpty():
-    echo: "ERROR: nothing on stack to peek"
-  else:
+proc sdump =
+  try:
+    echo sstack.pop()
+  except:
+    echo: "ERROR: nothing on $stack to pop"
+
+proc top =
+  try:
     echo stack.peek()
+  except:
+    echo: "ERROR: nothing on stack to peek"
 
 proc add =
-  let a = stack.pop()
-  let b = stack.pop()
-  stack.push(a + b)
+  try:
+    let a = stack.pop()
+    let b = stack.pop()
+    stack.push(a + b)
+  except:
+    echo "ERROR: less than two numbers on stack"
   
 proc sub =
-  let a = stack.pop()
-  let b = stack.pop()
-  stack.push(b - a)
+  try:
+    let a = stack.pop()
+    let b = stack.pop()
+    stack.push(b - a)
+  except:
+    echo "ERROR: less than two numbers on stack"
   
 proc mul =
-  let a = stack.pop()
-  let b = stack.pop()
-  stack.push(a * b)
+  try:
+    let a = stack.pop()
+    let b = stack.pop()
+    stack.push(a * b)
+  except:
+    echo "ERROR: less than two numbers on stack"
 
 proc divide = 
-  let a = stack.pop()
-  let b = stack.pop()
-  let x = divmod(b, a)
-  stack.push(x[0])
+  try:
+    let a = stack.pop()
+    let b = stack.pop()
+    let x = divmod(b, a)
+    stack.push(x[0])
+  except DivByZeroDefect:
+    echo "ERROR: division by zero"
+  except:
+    echo "ERROR: less than two numbers on stack"
   
 proc divrem = 
-  let a = stack.pop()
-  let b = stack.pop()
-  let x = divmod(b, a)
-  stack.push(x[1])
-  stack.push(x[0])
+  try:
+    let a = stack.pop()
+    let b = stack.pop()
+    let x = divmod(b, a)
+    stack.push(x[1])
+    stack.push(x[0])
+  except DivByZeroDefect:
+    echo "ERROR: division by zero"
+  except:
+    echo "ERROR: less than two numbers on stack"
   
 proc modulus = 
-  let a = stack.pop()
-  let b = stack.pop()
-  let x = divmod(b, a)
-  stack.push(x[1])
+  try:
+    let a = stack.pop()
+    let b = stack.pop()
+    let x = divmod(b, a)
+    stack.push(x[1])
+  except DivByZeroDefect:
+    echo "ERROR: division by zero"
+  except:
+    echo "ERROR: less than two numbers on stack"
+
+proc inc =
+  try:
+    stack.push(stack.pop + 1)
+  except:
+    echo "ERROR: nothing on stack to increment"
+
+proc dec =
+  try:
+    stack.push(stack.pop - 1)
+  except:
+    echo "ERROR: nothing on stack to decrement"
+
+proc bsl =
+  try:
+    let times = stack.pop
+    let x = stack.pop
+    stack.push(x shl times)
+  except:
+    echo "ERROR: less than two numbers on stack"
+
+proc bsr =
+  try:
+    let times = stack.pop
+    let x = stack.pop
+    stack.push(x shr times)
+  except:
+    echo "ERROR: less than two numbers on stack"
 
 proc dup =
-  stack.push(stack.peek())
+  try:
+    stack.push(stack.peek())
+  except:
+    echo "ERROR: nothing on stack to duplicate"
   
 proc drop =
-  discard stack.pop()
+  try:
+    discard stack.pop()
+  except:
+    echo "ERROR: nothing on stack to drop"
 
 proc rot =
-  let a = stack.pop()
-  let b = stack.pop()
-  let c = stack.pop()
-  stack.push(b)
-  stack.push(a)
-  stack.push(c)
+  try:
+    let a = stack.pop()
+    let b = stack.pop()
+    let c = stack.pop()
+    stack.push(b)
+    stack.push(a)
+    stack.push(c)
+  except:
+    echo "ERROR: less than three numbers on stack"
 
 proc swap =
-  let a = stack.pop()
-  let b = stack.pop()
-  stack.push(a)
-  stack.push(b)
+  try:
+    let a = stack.pop()
+    let b = stack.pop()
+    stack.push(a)
+    stack.push(b)
+  except:
+    echo "ERROR: less than two numbers on stack"
 
 proc over =
-  let a = stack.pop()
-  let b = stack.pop()
-  stack.push(b)
-  stack.push(a)
-  stack.push(b)
+  try:
+    let a = stack.pop
+    let b = stack.pop
+    stack.push(b)
+    stack.push(a)
+    stack.push(b)
+  except:
+    echo "ERROR: less than two numbers on stack"
 
 proc pick =
-  let i = stack.pop()
-  let temp = stack.toSeq.reversed
-  stack.push(temp[i])
+  try:
+    let i = stack.pop
+    let temp = stack.toSeq.reversed
+    stack.push(temp[i])
+  except:
+    echo "ERROR: nothing on stack"
   
 proc tuck =
-  let top = stack.peek()
-  swap()
-  stack.push(top)
+  try:
+    let top = stack.peek
+    swap()
+    stack.push(top)
+  except:
+    echo "ERROR: less than two numbers on stack"
   
 proc roll =
-  let i = stack.pop()
-  case i:
-  of 0: discard
-  of 1: swap()
-  of 2: rot()
-  else:
-    var temp = stack.toSeq.reversed
-    var newTop : int = temp[i]
-    temp.delete(i..i)
-    temp = temp.reversed
-    stack.clear()
-    for item in temp.items:
-      stack.push(item)
-    stack.push(newTop)
+  try:
+    let i = stack.pop()
+    case i:
+    of 0: discard
+    of 1: swap()
+    of 2: rot()
+    else:
+      var temp = stack.toSeq.reversed
+      var newTop : int = temp[i]
+      temp.delete(i..i)
+      temp = temp.reversed
+      stack.clear()
+      for item in temp.items:
+        stack.push(item)
+      stack.push(newTop)
+  except:
+    echo "ERROR: nothing on stack"
+
+proc sdup =
+  try:
+    sstack.push(sstack.peek())
+  except:
+    echo "ERROR: nothing on $stack"
+  
+proc sdrop =
+  try:
+    discard sstack.pop
+  except:
+    echo "ERROR: nothing on $stack"
+
+proc sswap =
+  try:
+    let s1 = sstack.pop
+    let s2 = sstack.pop
+    sstack.push(s1)
+    sstack.push(s2)
+  except:
+    echo "ERROR: less than two strings on $stack"
+
+proc stop =
+  try:
+    echo sstack.peek
+  except:
+    echo "ERROR: nothing on $stack to peek"
 
 proc rpush =
-  if stack.isEmpty():
-    echo: "ERROR: nothing on stack to pop"
-  else:
+  try:
     rstack.push(stack.pop)
+  except:
+    echo: "ERROR: nothing on stack to pop"
   
 proc rpop =
-  if rstack.isEmpty():
-    echo: "ERROR: nothing on rstack to pop"
-  else:
+  try:
     stack.push(rstack.pop)
+  except:
+    echo: "ERROR: nothing on rstack to pop"
   
 proc quote =
   token_ptr += 1
+  if buffer[token_ptr] == ")":
+    return
+  var depth = 0
   var quoted = """"""
-  while buffer[token_ptr] != ")":
+  var end_quote = false
+  while not end_quote:
     if buffer[token_ptr].len > 0:
-      if buffer[token_ptr] == "(": quote()
+      if buffer[token_ptr] == "(":
+        quoted = fmt"""{quoted}( {nested()}) """
       else: quoted = fmt"""{quoted}{buffer[token_ptr]} """
     token_ptr += 1
+    if buffer[token_ptr] == ")":
+      if depth == 0:
+        end_quote = true
   qstack.push(quoted)
 
-proc exn =
+proc nested : string =
+  token_ptr += 1
+  if buffer[token_ptr] == ")":
+    return
+  var depth = 0
+  var quoted = """"""
+  var end_quote = false
+  while not end_quote:
+    if buffer[token_ptr].len > 0:
+      if buffer[token_ptr] == "(":
+        quoted = fmt"""{quoted}( {nested()}) """
+      else: quoted = fmt"""{quoted}{buffer[token_ptr]} """
+    token_ptr += 1
+    if buffer[token_ptr] == ")":
+      if depth == 0:
+        end_quote = true
+  return quoted  
+
+proc qpush() =
+  qstack.push(sstack.pop)
+
+proc qpop() =
+  try:
+    sstack.push(qstack.pop)
+  except:
+    echo "ERROR: nothing on qstack to pop"
+
+proc exqtop =
   if not qstack.isEmpty:
     executeQuote(qstack.peek)
+  else:
+    echo "ERROR: nothing on qstack to peek"
 
-proc ex1 =
+proc exqpop =
   if not qstack.isEmpty:
     executeQuote(qstack.pop)
+  else:
+    echo "ERROR: nothing on qstack to pop"
 
 proc exc =
   if not qstack.isEmpty:
     discard qstack.pop
+  else:
+    echo "ERROR: nothing on qstack to drop"
 
 proc deferex =
   if not qstack.isEmpty:
     dreg = qstack.pop
+  else:
+    echo "ERROR: nothing on qstack to pop"
 
 proc dex =
   executeQuote(dreg)
 
 proc question =
-  if stack.pop > 0:
-    executeQuote(qstack.pop)
-  else:
-    discard qstack.pop
+  try:
+    discard stack.peek
+  except:
+    echo "ERROR: no condition result on stack to pop"
+  try:
+    discard qstack.peek
+  except:
+    echo "ERROR: no branch on qstack to pop"
+  try:
+    if stack.pop > 0:
+      executeQuote(qstack.pop)
+    else:
+      discard qstack.pop
+  except:
+    echo "ERROR: syntax"
+    echo "USAGE: cond_result_int ( branch_quote ) ?"
 
 proc questionelse =
-  if stack.pop > 0:
-    discard qstack.pop
-    executeQuote(qstack.pop)
-  else:
-    executeQuote(qstack.pop)
-    discard qstack.pop
+  try:
+    discard stack.peek
+  except:
+    echo "ERROR: no condition result on stack to pop"
+  if qstack.len < 2:
+    echo "ERROR: less than two quotes on qstack"
+  try:
+    if stack.pop > 0:
+      discard qstack.pop
+      executeQuote(qstack.pop)
+    else:
+      executeQuote(qstack.pop)
+      discard qstack.pop
+  except:
+    echo "ERROR: syntax"
+    echo "USAGE: cond_result_int ( 1+_branch ) ( 0-_branch ) ?:"
 
 proc gt0 =
-  if stack.peek > 0:
-    stack.push(1)
-  else: stack.push(0)
+  try:
+    if stack.peek > 0:
+      stack.push(1)
+    else: stack.push(0)
+  except:
+    echo "ERROR: nothing on stack to compare"
 
 proc lt0 =
-  if stack.peek < 0:
-    stack.push(1)
-  else: stack.push(0)
+  try:
+    if stack.peek < 0:
+      stack.push(1)
+    else: stack.push(0)
+  except:
+    echo "ERROR: nothing on stack to compare"
 
 proc eq0 =
-  if stack.peek == 0:
-    stack.push(1)
-  else: stack.push(0)
+  try:
+    if stack.peek == 0:
+      stack.push(1)
+    else: stack.push(0)
+  except:
+    echo "ERROR: nothing on stack to compare"
 
 proc word =
-  procs[sstack.pop] = qstack.pop
+  try:
+    discard sstack.peek
+  except:
+    echo "ERROR: no proc name provided; nothing on $stack"
+  try:
+    discard qstack.peek
+  except:
+    echo "ERROR: cannot declare proc without quote body; nothing on qstack"
+  try:
+    let name = sstack.pop.strip
+    procs[name] = qstack.pop
+    echo fmt"""{name} created"""
+  except:
+    echo "ERROR: could not create proc"
 
 proc stackDump(s : Stack) =
   var i : int = 0
@@ -273,14 +492,16 @@ proc stackDump(s : Stack) =
     i += 1
 
 proc executeQuote(q : string) =
+  let return_ptr = token_ptr
   let tokens : seq[string] = q.split(parseRule)
   buffer = tokens
-  var quote_ptr = 0
-  while quote_ptr < tokens.len:
-    let token = tokens[quote_ptr]
+  token_ptr = 0
+  while token_ptr < tokens.len:
+    let token = tokens[token_ptr]
     if token.len > 0:
       parseToken(token)
-    quote_ptr += 1
+    token_ptr += 1
+  token_ptr = return_ptr
 
 proc parseToken(token : string) =
   var x : int
@@ -293,12 +514,17 @@ proc parseToken(token : string) =
       else:
         case token.toLowerAscii:
         of ".": dump()
+        of "$": sdump()
         of "+": add()
         of "-": sub()
         of "*": mul()
         of "/": divide()
         of "/%": divrem()
         of "%": modulus()
+        of "++": inc()
+        of "--": dec()
+        of "<<": bsl()
+        of ">>": bsr()
         of "dup": dup()
         of "drop": drop()
         of "rot": rot()
@@ -307,12 +533,18 @@ proc parseToken(token : string) =
         of "pick": pick()
         of "tuck": tuck()
         of "roll": roll()
-        of "peek": peek()
+        of "top": top()
+        of "$dup": sdup()
+        of "$drop": sdrop()
+        of "$swap": sswap()
+        of "$top": stop()
         of ">r": rpush()
         of "r>": rpop()
+        of ">q": qpush()
+        of "q>": qpop()
         of "(": quote()
-        of "exn": exn()
-        of "ex1": ex1()
+        of "'": exqtop()
+        of "ex1": exqpop()
         of "exc": exc()
         of "defer": deferex()
         of "dex": dex()
@@ -324,7 +556,7 @@ proc parseToken(token : string) =
         of "proc": word()
         of "help": help()
         else:
-          if procs[token] != "":
+          if token in procs:
             executeQuote(procs[token])
           else: echo fmt"""ERROR: Unknown word "{token}""""
 
