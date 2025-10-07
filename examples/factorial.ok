@@ -1,0 +1,17 @@
+"fact" ( eq0
+  ( ++ )
+  ( dup -- fact * )
+  ?:
+) proc
+
+"3 factorial is: " $
+3 fact .
+
+"1 factorial is: " $
+1 fact .
+
+"8 factorial is: " $
+8 fact .
+
+"20 factorial is: " $
+20 fact .

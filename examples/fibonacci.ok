@@ -1,0 +1,23 @@
+"fib" ( eq0 !
+  ( 1 = swap 2 = rot |
+    ( drop 1 )
+	( dup >r -- fib r> 2 - fib + )
+	?: )
+  ?
+) proc
+
+"fibSeq" ( ++ >r 0
+  ( dup rcmp !
+    ( fib . ++ ' )
+  ?
+  ) ' r> - drop drop
+) proc
+
+"The fifth number in the fibonacci sequence is: " $
+5 fib .
+
+"The tenth number in the fibonacci sequence is: " $
+10 fib .
+
+"The fibonacci sequence from 0 to 10 is: " $
+10 fibSeq

@@ -1,0 +1,17 @@
+"decToBin" ( eq0
+  ( 0 swap drop )
+  ( dup >r 2 % r> swap >r 2 / decToBin 10 * r> + )
+  ?:
+) proc
+
+"10 base 10 in binary is: " $
+10 decToBin .
+
+"127 base 10 in binary is: " $
+127 decToBin .
+
+"85 base 10 in binary is: " $
+85 decToBin .
+
+"42 base 10 in binary is: " $
+42 decToBin .

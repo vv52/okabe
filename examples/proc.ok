@@ -1,0 +1,20 @@
+# named procedure
+"^3" ( dup dup * * ) proc
+"2^3 is: " $
+2 ^3 .
+
+# anonymous procedure (quote)
+( dup dup * * )
+"2^3 is: " $
+2 ' .
+
+# deferred anonymous procedure
+( dup dup * * ) defer
+"2^3 is: " $
+2 dex .
+
+# named procs function like any built-in words
+# quotes are stored on a stack and executed
+# defer stores the quote in a register instead of the quote
+#   stack; the quote stored in dreg can be overwritten at
+#   any time; defer can be thought of like a type of macro
