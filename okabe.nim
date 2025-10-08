@@ -1,7 +1,9 @@
 import std/[strutils, strscans, strformat, strtabs]
-import std/[algorithm, sequtils, cmdline, re]
-import std/[terminal]
+import std/[algorithm, sequtils, re]
+import std/[cmdline, terminal, osproc]
 import stacks, decimal
+
+# TODO: ARRAYS, MAP, STRING OPS, ITERATORS, ENUM
 
 var docs = newStringTable()
 
@@ -108,6 +110,8 @@ proc linv() : void
 docs["!"] = ("( a -- b ) if a is 1, b is 0; if a is 0, b is 1")
 proc word() : void
 docs["proc"] = "$( s -- ) ()( q -- ) make new word from top of string stack that does top of qstack"
+proc cmd() : void
+docs["cmd"] = "$( s -- ) ( -- e ) pop string stack and exec in shell, push exit code to stack and echo output"
 proc stackDump(s : Stack) : void
 proc memDump() : void
 proc memClear() : void
@@ -117,15 +121,15 @@ proc repl() : void
 proc incl() : void
 proc preprocess(file : string) : string
 proc interpret(file : string) : void
-proc compile(file : string) : void
 proc error(text : string) : void
 proc warning(text : string) : void
+proc usage(text : string) : void
+proc info(text : string) : void
 proc pass(text : string) : void
 proc fail(text : string) : void
-proc usage(text : string) : void
 
 var debug = false
-var help_mode = false
+var helpMode = false
 var interpreting = false
 
 var stack = newStack[DecimalType](capacity = 64)     # THE stack
@@ -141,33 +145,33 @@ var iftokens : seq[string]
 
 var procs = newStringTable()
 
-var token_ptr : int = 0
+var tokenPtr : int = 0
 
-let parse_rule = re"""\s+(?=(?:[^\"]*[\"][^\"]*[\"])*[^\"]*$)"""
+let parseRule = re"""\s+(?=(?:[^\"]*[\"][^\"]*[\"])*[^\"]*$)"""
 
 proc help =
-  help_mode = true
+  helpMode = true
 
 proc dump =
   try:
     echo stack.pop
   except:
     error("nothing on stack to pop")
-    memdump()
+    memDump()
 
 proc sdump =
   try:
     echo sstack.pop
   except:
     error("nothing on $stack to pop")
-    memdump()
+    memDump()
 
 proc top =
   try:
     echo stack.peek
   except:
     error("nothing on stack to peek")
-    memdump()
+    memDump()
 
 proc add =
   try:
@@ -176,7 +180,7 @@ proc add =
     stack.push(a + b)
   except:
     error("less than two numbers on stack")
-    memdump()
+    memDump()
   
 proc sub =
   try:
@@ -185,7 +189,7 @@ proc sub =
     stack.push(b - a)
   except:
     error("less than two numbers on stack")
-    memdump()
+    memDump()
   
 proc mul =
   try:
@@ -194,7 +198,7 @@ proc mul =
     stack.push(a * b)
   except:
     error("less than two numbers on stack")
-    memdump()
+    memDump()
 
 proc divint = 
   try:
@@ -204,10 +208,10 @@ proc divint =
     stack.push(x[0])
   except DivByZeroDefect:
     error("division by zero")
-    memdump()
+    memDump()
   except:
     error("less than two numbers on stack")
-    memdump()
+    memDump()
   
 proc divrem = 
   try:
@@ -218,10 +222,10 @@ proc divrem =
     stack.push(x[0])
   except DivByZeroDefect:
     error("division by zero")
-    memdump()
+    memDump()
   except:
     error("less than two numbers on stack")
-    memdump()
+    memDump()
   
 proc divide =
   try:
@@ -230,10 +234,10 @@ proc divide =
     stack.push(b / a)
   except DivByZeroDefect:
     error("division by zero")
-    memdump()
+    memDump()
   except:
     error("less than two numbers on stack")
-    memdump()
+    memDump()
 
 proc modulus = 
   try:
@@ -245,21 +249,21 @@ proc modulus =
     error("division by zero")
   except:
     error("less than two numbers on stack")
-    memdump()
+    memDump()
 
 proc inc =
   try:
     stack.push(stack.pop + 1)
   except:
     error("nothing on stack to increment")
-    memdump()
+    memDump()
 
 proc dec =
   try:
     stack.push(stack.pop - 1)
   except:
     error("nothing on stack to decrement")
-    memdump()
+    memDump()
 
 proc bsl =
   try:
@@ -268,7 +272,7 @@ proc bsl =
     stack.push(shift(x, times))
   except:
     error("less than two numbers on stack")
-    memdump()
+    memDump()
 
 proc bsr =
   try:
@@ -277,7 +281,7 @@ proc bsr =
     stack.push(shift(x, times))
   except:
     error("less than two numbers on stack")
-    memdump()
+    memDump()
 
 proc trunc =
   try:
@@ -302,14 +306,14 @@ proc dup =
     stack.push(stack.peek)
   except:
     error("nothing on stack to duplicate")
-    memdump()
+    memDump()
   
 proc drop =
   try:
     discard stack.pop
   except:
     warning("nothing on stack to drop")
-    memdump()
+    memDump()
 
 proc rot =
   try:
@@ -321,7 +325,7 @@ proc rot =
     stack.push(c)
   except:
     error("less than three numbers on stack")
-    memdump()
+    memDump()
 
 proc swap =
   try:
@@ -331,7 +335,7 @@ proc swap =
     stack.push(b)
   except:
     error("less than two numbers on stack")
-    memdump()
+    memDump()
 
 proc over =
   try:
@@ -342,7 +346,7 @@ proc over =
     stack.push(b)
   except:
     error("less than two numbers on stack")
-    memdump()
+    memDump()
 
 proc pick =
   try:
@@ -351,7 +355,7 @@ proc pick =
     stack.push(temp[i])
   except:
     error("nothing on stack")
-    memdump()
+    memDump()
   
 proc tuck =
   try:
@@ -360,7 +364,7 @@ proc tuck =
     stack.push(top)
   except:
     error("less than two numbers on stack")
-    memdump()
+    memDump()
   
 proc roll =
   try:
@@ -380,21 +384,21 @@ proc roll =
       stack.push(newTop)
   except:
     error("nothing on stack")
-    memdump()
+    memDump()
 
 proc sdup =
   try:
     sstack.push(sstack.peek)
   except:
     error("nothing on $stack")
-    memdump()
+    memDump()
   
 proc sdrop =
   try:
     discard sstack.pop
   except:
     warning("nothing on $stack to drop")
-    memdump()
+    memDump()
 
 proc sswap =
   try:
@@ -404,28 +408,28 @@ proc sswap =
     sstack.push(s2)
   except:
     error("less than two strings on $stack")
-    memdump()
+    memDump()
 
 proc stop =
   try:
     echo sstack.peek
   except:
     error("nothing on $stack to peek")
-    memdump()
+    memDump()
 
 proc rpush =
   try:
     rstack.push(stack.pop)
   except:
     error("nothing on stack to pop")
-    memdump()
+    memDump()
   
 proc rpop =
   try:
     stack.push(rstack.pop)
   except:
     error("nothing on rstack to pop")
-    memdump()
+    memDump()
 
 proc rcmp =
   try:
@@ -434,42 +438,42 @@ proc rcmp =
     else: stack.push(newDecimal(0))
   except:
     error("cannot compare stack and rstack if either is empty")
-    memdump()
+    memDump()
   
 proc quote =
-  token_ptr += 1
-  if buffer[token_ptr] == ")":
+  tokenPtr += 1
+  if buffer[tokenPtr] == ")":
     return
   var depth = 0
   var quoted = """"""
-  var end_quote = false
-  while not end_quote:
-    if buffer[token_ptr].len > 0:
-      if buffer[token_ptr] == "(":
+  var endQuote = false
+  while not endQuote:
+    if buffer[tokenPtr].len > 0:
+      if buffer[tokenPtr] == "(":
         quoted = fmt"""{quoted}( {nested()}) """
-      else: quoted = fmt"""{quoted}{buffer[token_ptr]} """
-    token_ptr += 1
-    if buffer[token_ptr] == ")":
+      else: quoted = fmt"""{quoted}{buffer[tokenPtr]} """
+    tokenPtr += 1
+    if buffer[tokenPtr] == ")":
       if depth == 0:
-        end_quote = true
+        endQuote = true
   qstack.push(quoted)
 
 proc nested : string =
-  token_ptr += 1
-  if buffer[token_ptr] == ")":
+  tokenPtr += 1
+  if buffer[tokenPtr] == ")":
     return
   var depth = 0
   var quoted = """"""
-  var end_quote = false
-  while not end_quote:
-    if buffer[token_ptr].len > 0:
-      if buffer[token_ptr] == "(":
+  var endQuote = false
+  while not endQuote:
+    if buffer[tokenPtr].len > 0:
+      if buffer[tokenPtr] == "(":
         quoted = fmt"""{quoted}( {nested()}) """
-      else: quoted = fmt"""{quoted}{buffer[token_ptr]} """
-    token_ptr += 1
-    if buffer[token_ptr] == ")":
+      else: quoted = fmt"""{quoted}{buffer[tokenPtr]} """
+    tokenPtr += 1
+    if buffer[tokenPtr] == ")":
       if depth == 0:
-        end_quote = true
+        endQuote = true
   return quoted  
 
 proc qpush() =
@@ -480,35 +484,35 @@ proc qpop() =
     sstack.push(qstack.pop)
   except:
     error("nothing on qstack to pop")
-    memdump()
+    memDump()
 
 proc exqtop =
   if not qstack.isEmpty:
     executeQuote(qstack.peek)
   else:
     error("nothing on qstack to peek")
-    memdump()
+    memDump()
 
 proc exqpop =
   if not qstack.isEmpty:
     executeQuote(qstack.pop)
   else:
     error("nothing on qstack to pop")
-    memdump()
+    memDump()
 
 proc exc =
   if not qstack.isEmpty:
     discard qstack.pop
   else:
     warning("nothing on qstack to drop")
-    memdump()
+    memDump()
 
 proc deferex =
   if not qstack.isEmpty:
     dreg = qstack.pop
   else:
     error("nothing on qstack to pop")
-    memdump()
+    memDump()
 
 proc dex =
   executeQuote(dreg)
@@ -518,12 +522,12 @@ proc question =
     discard stack.peek
   except:
     error("no condition result on stack to pop")
-    memdump()
+    memDump()
   try:
     discard qstack.peek
   except:
     error("no branch on qstack to pop")
-    memdump()
+    memDump()
   try:
     if stack.pop > 0:
       executeQuote(qstack.pop)
@@ -538,10 +542,10 @@ proc questionelse =
     discard stack.peek
   except:
     error("no condition result on stack to pop")
-    memdump()
+    memDump()
   if qstack.len < 2:
     error("less than two quotes on qstack")
-    memdump()
+    memDump()
   try:
     if stack.pop > 0:
       discard qstack.pop
@@ -561,7 +565,7 @@ proc gt0 =
     else: stack.push(newDecimal(0))
   except:
     error("nothing on stack to compare")
-    memdump()
+    memDump()
 
 proc lt0 =
   try:
@@ -570,7 +574,7 @@ proc lt0 =
     else: stack.push(newDecimal(0))
   except:
     error("nothing on stack to compare")
-    memdump()
+    memDump()
 
 proc eq0 =
   try:
@@ -579,7 +583,7 @@ proc eq0 =
     else: stack.push(newDecimal(0))
   except:
     error("nothing on stack to compare")
-    memdump()
+    memDump()
 
 proc land() =
   try:
@@ -588,7 +592,7 @@ proc land() =
     else: stack.push(newDecimal(0))
   except:
     error("less than two values on stack")
-    memdump()
+    memDump()
   
 proc lor() =
   try:
@@ -598,7 +602,7 @@ proc lor() =
     else: stack.push(newDecimal(0))
   except:
     error("less than two values on stack")
-    memdump()
+    memDump()
   
 proc lxor() =
   try:
@@ -607,7 +611,7 @@ proc lxor() =
     else: stack.push(newDecimal(0))
   except:
     error("less than two values on stack")
-    memdump()
+    memDump()
 
 proc eq =
   try:
@@ -616,7 +620,7 @@ proc eq =
     else: stack.push(newDecimal(0))
   except:
     error("less than two values on stack")
-    memdump()
+    memDump()
 
 proc linv =
   try:
@@ -625,32 +629,41 @@ proc linv =
     else: stack.push(newDecimal(0))
   except:
     error("nothing on stack")
-    memdump()
+    memDump()
 
 proc word =
   try:
     discard sstack.peek
   except:
     error("no proc name provided; nothing on $stack")
-    memdump()
+    memDump()
   try:
     discard qstack.peek
   except:
     error("cannot declare proc without quote body; nothing on qstack")
-    memdump()
+    memDump()
   try:
     let name = sstack.pop.strip
     procs[name] = qstack.pop
-    echo fmt"""{name} created"""
+    info(fmt"""{name} created""")
   except:
     error("could not create proc")
-    memdump()
+    memDump()
+
+proc cmd =
+  try:
+    var result = execCmdEx(sstack.pop)
+    stack.push(newDecimal(result[1]))
+    echo result[0]
+    echo fmt"Exit code: {result[1]}"
+  except:
+    warning("could not execute command or nothing on string stack")
 
 proc stackDump(s : Stack) =
   var i : int = 0
-  let stack_dump = s.toSeq.reversed
+  let stackContents = s.toSeq.reversed
   echo "cell | value"
-  for item in stackdump:
+  for item in stackContents:
     echo fmt"  {i}  |   {$item}"
     i += 1
 
@@ -680,19 +693,19 @@ proc memClear =
   dreg = """"""
   
 proc executeQuote(q : string) =
-  let return_ptr = token_ptr
+  let returnPtr = tokenPtr
   let tokens : seq[string] = q.split(parseRule)
   buffer = tokens
-  token_ptr = 0
-  while token_ptr < tokens.len:
-    let token = tokens[token_ptr]
+  tokenPtr = 0
+  while tokenPtr < tokens.len:
+    let token = tokens[tokenPtr]
     if token.len > 0:
       if debug:
-        echo fmt"""({token_ptr}) {token}"""
+        echo fmt"""({tokenPtr}) {token}"""
         # memDump()
       parseToken(token)
-    token_ptr += 1
-  token_ptr = return_ptr
+    tokenPtr += 1
+  tokenPtr = returnPtr
   if interpreting:
     buffer = iftokens
 
@@ -758,6 +771,7 @@ proc parseToken(token : string) =
         of "=": eq()
         of "!": linv()
         of "proc": word()
+        of "cmd": cmd()
         of "include": incl()
         of "help": help()
         of "bin": echo "TODO: swap base to BINARY"
@@ -767,60 +781,60 @@ proc parseToken(token : string) =
         else:
           if token in procs:
             executeQuote(procs[token])
-          else: echo fmt"""ERROR: Unknown word "{token}""""
+          else: error(fmt""" unknown word "{token}"""")
 
 proc repl =
-  var should_end : bool = false
-  while not should_end:
+  var shouldEnd : bool = false
+  while not shouldEnd:
     let input : string = readLine(stdin)
     if input != "quit":
       let tokens : seq[string] = input.split(parseRule)
       buffer = tokens
-      token_ptr = 0
-      while token_ptr < tokens.len:
-        let token = tokens[token_ptr]
+      tokenPtr = 0
+      while tokenPtr < tokens.len:
+        let token = tokens[tokenPtr]
         if token.len > 0:
-          if help_mode:
+          if helpMode:
             if docs[token] == "":
               echo fmt"""No help available for "{token}""""
             else: echo docs[token]
-            help_mode = false
+            helpMode = false
           else: 
             if debug:
-              echo fmt"""[{token_ptr}] {token}"""
+              echo fmt"""[{tokenPtr}] {token}"""
             parseToken(token)
-        token_ptr += 1
+        tokenPtr += 1
       echo "ok"
       if debug:
         memDump()
     else:
-      should_end = true
+      shouldEnd = true
 
 proc incl() =
   var file : string
   try:
     file = sstack.pop.strip
-    let return_ptr = token_ptr
-    let buffer_swap = buffer
-    let stack_swap = stack
-    let rstack_swap = rstack
-    let sstack_swap = sstack
-    let qstack_swap = qstack
-    let dreg_swap = dreg
+    let returnPtr = tokenPtr
+    let bufferSwap = buffer
+    let stackSwap = stack
+    let rstackSwap = rstack
+    let sstackSwap = sstack
+    let qstackSwap = qstack
+    let dregSwap = dreg
     buffer.setLen(0)
-    memclear()
+    memClear()
     interpret(file)
-    memclear()
-    token_ptr = return_ptr
-    buffer = buffer_swap
-    stack = stack_swap
-    rstack = rstack_swap
-    sstack = sstack_swap
-    qstack = qstack_swap
-    dreg = dreg_swap
+    memClear()
+    tokenPtr = returnPtr
+    buffer = bufferSwap
+    stack = stackSwap
+    rstack = rstackSwap
+    sstack = sstackSwap
+    qstack = qstackSwap
+    dreg = dregSwap
   except:
-    echo fmt"ERROR: could not process {file}"
-    memdump()
+    error(fmt"""cannot read file "{file}"""")
+    memDump()
 
 proc preprocess(file : string) : string = 
   var processed = """"""
@@ -837,7 +851,7 @@ proc preprocess(file : string) : string =
           i += 1
       processed.add(' ')
   except:
-    echo fmt"ERROR: cannot read file {file}"
+    error(fmt"""cannot read file "{file}"""")
   return processed
 
 proc interpret(file : string) =
@@ -846,20 +860,17 @@ proc interpret(file : string) =
   iftokens = ifbuffer.split(parseRule)
   let tokens : seq[string] = iftokens
   buffer = iftokens
-  token_ptr = 0
-  while token_ptr < tokens.len:
-    let token = tokens[token_ptr]
+  tokenPtr = 0
+  while tokenPtr < tokens.len:
+    let token = tokens[tokenPtr]
     if token.len > 0:
-      if help_mode:
-        help_mode = false
+      if helpMode:
+        helpMode = false
       else: 
         parseToken(token)
         if debug:
           memDump()
-    token_ptr += 1
-
-proc compile(file : string) =
-  echo "TODO: add file compiler to asm or nim"
+    tokenPtr += 1
 
 proc error(text : string) =
   styledEcho styleBright, fgRed, "ERROR:", resetStyle, fmt" {text}"
@@ -867,14 +878,17 @@ proc error(text : string) =
 proc warning(text : string) =
   styledEcho styleBright, fgYellow, "WARNING:", resetStyle, fmt" {text}"
 
-proc pass(text : string) =
-  echo "TODO"
-
-proc fail(text : string) =
-  echo "TODO"
-  
 proc usage(text : string) =
   styledEcho styleBright, fgCyan, "USAGE:", resetStyle, fmt" {text}"
+
+proc info(text : string) =
+  styledEcho styleDim, fgBlue, fmt"{text}"
+  
+proc pass(text : string) =
+  styledEcho styleBright, fgGreen, "[PASS]", resetStyle, fmt" {text}"
+
+proc fail(text : string) =
+  styledEcho styleBright, fgRed, "[FAIL]", resetStyle, fmt" {text}"
   
 if isMainModule:
   let params = commandLineParams()
