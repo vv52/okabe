@@ -1,9 +1,37 @@
+# iterating from n to 0 with recursive ifelse
+
+"Count down from ten (?:): " $
+
 10 ( top -- gt0 ( ' ) ( "zero!" $ ) ?: ) '
 
-"---" $
+
+
+# iterating from n to 0 with recursive if
+
+"Count down from ten (?): " $
 
 10 ( top -- gt0 ( ' ) ? ) ' .
 
-"---" $
+
+
+# dispatching quote stored at top of q stack
+
+"Count down from 5 (anonymously): "
 
 5 '
+
+
+
+# iterating from 0 to n with recursive notifelse
+
+"Count up to ten (! ?:): " $
+
+10 >r 0 ( top ++ rcmp ! ( ' ) ( . ) ?: ) '
+
+
+
+# iterating from 0 to n with recursive ifelse
+
+"Count up to twenty (?:): " $
+
+20 >r 0 ( top ++ rcmp ( . ) ( ' ) ?: ) '

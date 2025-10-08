@@ -1,0 +1,1 @@
+"Hello from before the include!" "examples/proc.ok" include $

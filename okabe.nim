@@ -1,7 +1,7 @@
 import std/[strutils, strscans, strformat, strtabs]
 import std/[algorithm, sequtils, cmdline, re]
-from std/math import divmod
-import stacks
+import std/[terminal]
+import stacks, decimal
 
 var docs = newStringTable()
 
@@ -20,11 +20,13 @@ docs["-"] = "( a b -- c ) a - b"
 proc mul() : void
 docs["*"] = "( a b -- c ) a * b"
 proc divide() : void
-docs["/"] = "( a b -- c ) a / b, floored int"
+docs["/"] = "( a b -- c ) a / b, arbitrary decimal number"
 proc divrem() : void
 docs["/%"] = "( a b -- c d ) a / b, int and remainder"
 proc modulus() : void
 docs["%"] = "( a b -- c ) a / b, remainder"
+proc divint() : void
+docs["//"] = "( a b -- c ) a / b, floored int"
 proc inc() : void
 docs["++"] = "( a -- b ) b is a + 1"
 proc dec() : void
@@ -33,6 +35,12 @@ proc bsl() : void
 docs["<<"] = "( a b -- c ) c is a bitshifted left b times"
 proc bsr() : void
 docs[">>"] = "( a b -- c ) c is a bitshifted right b times"
+proc trunc() : void
+docs["trunc"] = "( d -- i ) truncate top of stack to int"
+proc floor() : void
+docs["floor"] = "( d -- i ) floor top of stack to int"
+proc ceil() : void
+docs["ceil"] = "( d -- i ) ceil top of stack to int"
 proc dup() : void
 docs["dup"] = "( a -- a a )"
 proc sdup() : void
@@ -102,28 +110,28 @@ proc word() : void
 docs["proc"] = "$( s -- ) ()( q -- ) make new word from top of string stack that does top of qstack"
 proc stackDump(s : Stack) : void
 proc memDump() : void
+proc memClear() : void
 proc executeQuote(q : string) : void
 proc parseToken(token : string) : void
 proc repl() : void
+proc incl() : void
 proc preprocess(file : string) : string
 proc interpret(file : string) : void
 proc compile(file : string) : void
-
-# let BINARY = "$b"
-# let DECIMAL = "$i"
-# let HEXADECIMAL = "$h"
-# let FLOAT = "$f"
-# let NUMTYPE = [ DECIMAL, BINARY, HEXADECIMAL, FLOAT ]
-let base = [ "$i", "$b", "$h", "$f" ]
+proc error(text : string) : void
+proc warning(text : string) : void
+proc pass(text : string) : void
+proc fail(text : string) : void
+proc usage(text : string) : void
 
 var debug = false
 var help_mode = false
 var interpreting = false
 
-var stack = newStack[int](capacity = 16)     # THE stack
-var rstack = newStack[int](capacity = 16)    # rstack for forth algs
-var sstack = newStack[string](capacity = 16) # stack for string literals
-var qstack = newStack[string](capacity = 16) # stack for quoted code in conditionals and processes
+var stack = newStack[DecimalType](capacity = 64)     # THE stack
+var rstack = newStack[DecimalType](capacity = 64)    # rstack for forth algs
+var sstack = newStack[string](capacity = 64) # stack for string literals
+var qstack = newStack[string](capacity = 64) # stack for quoted code in conditionals and processes
 
 var dreg : string
 var buffer : seq[string]
@@ -142,157 +150,187 @@ proc help =
 
 proc dump =
   try:
-    echo stack.pop()
+    echo stack.pop
   except:
-    echo: "ERROR: nothing on stack to pop"
+    error("nothing on stack to pop")
     memdump()
 
 proc sdump =
   try:
-    echo sstack.pop()
+    echo sstack.pop
   except:
-    echo: "ERROR: nothing on $stack to pop"
+    error("nothing on $stack to pop")
     memdump()
 
 proc top =
   try:
-    echo stack.peek()
+    echo stack.peek
   except:
-    echo: "ERROR: nothing on stack to peek"
+    error("nothing on stack to peek")
     memdump()
 
 proc add =
   try:
-    let a = stack.pop()
-    let b = stack.pop()
+    let a = stack.pop
+    let b = stack.pop
     stack.push(a + b)
   except:
-    echo "ERROR: less than two numbers on stack"
+    error("less than two numbers on stack")
     memdump()
   
 proc sub =
   try:
-    let a = stack.pop()
-    let b = stack.pop()
+    let a = stack.pop
+    let b = stack.pop
     stack.push(b - a)
   except:
-    echo "ERROR: less than two numbers on stack"
+    error("less than two numbers on stack")
     memdump()
   
 proc mul =
   try:
-    let a = stack.pop()
-    let b = stack.pop()
+    let a = stack.pop
+    let b = stack.pop
     stack.push(a * b)
   except:
-    echo "ERROR: less than two numbers on stack"
+    error("less than two numbers on stack")
     memdump()
 
-proc divide = 
+proc divint = 
   try:
-    let a = stack.pop()
-    let b = stack.pop()
+    let a = stack.pop
+    let b = stack.pop
     let x = divmod(b, a)
     stack.push(x[0])
   except DivByZeroDefect:
-    echo "ERROR: division by zero"
+    error("division by zero")
     memdump()
   except:
-    echo "ERROR: less than two numbers on stack"
+    error("less than two numbers on stack")
     memdump()
   
 proc divrem = 
   try:
-    let a = stack.pop()
-    let b = stack.pop()
+    let a = stack.pop
+    let b = stack.pop
     let x = divmod(b, a)
     stack.push(x[1])
     stack.push(x[0])
   except DivByZeroDefect:
-    echo "ERROR: division by zero"
+    error("division by zero")
     memdump()
   except:
-    echo "ERROR: less than two numbers on stack"
+    error("less than two numbers on stack")
     memdump()
   
+proc divide =
+  try:
+    let a = stack.pop
+    let b = stack.pop
+    stack.push(b / a)
+  except DivByZeroDefect:
+    error("division by zero")
+    memdump()
+  except:
+    error("less than two numbers on stack")
+    memdump()
+
 proc modulus = 
   try:
-    let a = stack.pop()
-    let b = stack.pop()
+    let a = stack.pop
+    let b = stack.pop
     let x = divmod(b, a)
     stack.push(x[1])
   except DivByZeroDefect:
-    echo "ERROR: division by zero"
+    error("division by zero")
   except:
-    echo "ERROR: less than two numbers on stack"
+    error("less than two numbers on stack")
     memdump()
 
 proc inc =
   try:
     stack.push(stack.pop + 1)
   except:
-    echo "ERROR: nothing on stack to increment"
+    error("nothing on stack to increment")
     memdump()
 
 proc dec =
   try:
     stack.push(stack.pop - 1)
   except:
-    echo "ERROR: nothing on stack to decrement"
+    error("nothing on stack to decrement")
     memdump()
 
 proc bsl =
   try:
     let times = stack.pop
     let x = stack.pop
-    stack.push(x shl times)
+    stack.push(shift(x, times))
   except:
-    echo "ERROR: less than two numbers on stack"
+    error("less than two numbers on stack")
     memdump()
 
 proc bsr =
   try:
-    let times = stack.pop
+    let times = stack.pop * -1
     let x = stack.pop
-    stack.push(x shr times)
+    stack.push(shift(x, times))
   except:
-    echo "ERROR: less than two numbers on stack"
+    error("less than two numbers on stack")
     memdump()
+
+proc trunc =
+  try:
+    stack.push(truncate(stack.pop))
+  except:
+    error("nothing on stack to truncate")
+
+proc floor =
+  try:
+    stack.push(floor(stack.pop))
+  except:
+    error("nothing on stack to floor")
+
+proc ceil =
+  try:
+    stack.push(ceil(stack.pop))
+  except:
+    error("nothing on stack to ceil")
 
 proc dup =
   try:
-    stack.push(stack.peek())
+    stack.push(stack.peek)
   except:
-    echo "ERROR: nothing on stack to duplicate"
+    error("nothing on stack to duplicate")
     memdump()
   
 proc drop =
   try:
-    discard stack.pop()
+    discard stack.pop
   except:
-    echo "ERROR: nothing on stack to drop"
+    warning("nothing on stack to drop")
     memdump()
 
 proc rot =
   try:
-    let a = stack.pop()
-    let b = stack.pop()
-    let c = stack.pop()
+    let a = stack.pop
+    let b = stack.pop
+    let c = stack.pop
     stack.push(b)
     stack.push(a)
     stack.push(c)
   except:
-    echo "ERROR: less than three numbers on stack"
+    error("less than three numbers on stack")
     memdump()
 
 proc swap =
   try:
-    let a = stack.pop()
-    let b = stack.pop()
+    let a = stack.pop
+    let b = stack.pop
     stack.push(a)
     stack.push(b)
   except:
-    echo "ERROR: less than two numbers on stack"
+    error("less than two numbers on stack")
     memdump()
 
 proc over =
@@ -303,16 +341,16 @@ proc over =
     stack.push(a)
     stack.push(b)
   except:
-    echo "ERROR: less than two numbers on stack"
+    error("less than two numbers on stack")
     memdump()
 
 proc pick =
   try:
-    let i = stack.pop
+    let i = parseInt($stack.pop)
     let temp = stack.toSeq.reversed
     stack.push(temp[i])
   except:
-    echo "ERROR: nothing on stack"
+    error("nothing on stack")
     memdump()
   
 proc tuck =
@@ -321,19 +359,19 @@ proc tuck =
     swap()
     stack.push(top)
   except:
-    echo "ERROR: less than two numbers on stack"
+    error("less than two numbers on stack")
     memdump()
   
 proc roll =
   try:
-    let i = stack.pop()
+    let i = parseInt($stack.pop)
     case i:
     of 0: discard
     of 1: swap()
     of 2: rot()
     else:
       var temp = stack.toSeq.reversed
-      var newTop : int = temp[i]
+      var newTop = temp[i]
       temp.delete(i..i)
       temp = temp.reversed
       stack.clear()
@@ -341,21 +379,21 @@ proc roll =
         stack.push(item)
       stack.push(newTop)
   except:
-    echo "ERROR: nothing on stack"
+    error("nothing on stack")
     memdump()
 
 proc sdup =
   try:
-    sstack.push(sstack.peek())
+    sstack.push(sstack.peek)
   except:
-    echo "ERROR: nothing on $stack"
+    error("nothing on $stack")
     memdump()
   
 proc sdrop =
   try:
     discard sstack.pop
   except:
-    echo "ERROR: nothing on $stack"
+    warning("nothing on $stack to drop")
     memdump()
 
 proc sswap =
@@ -365,37 +403,37 @@ proc sswap =
     sstack.push(s1)
     sstack.push(s2)
   except:
-    echo "ERROR: less than two strings on $stack"
+    error("less than two strings on $stack")
     memdump()
 
 proc stop =
   try:
     echo sstack.peek
   except:
-    echo "ERROR: nothing on $stack to peek"
+    error("nothing on $stack to peek")
     memdump()
 
 proc rpush =
   try:
     rstack.push(stack.pop)
   except:
-    echo "ERROR: nothing on stack to pop"
+    error("nothing on stack to pop")
     memdump()
   
 proc rpop =
   try:
     stack.push(rstack.pop)
   except:
-    echo "ERROR: nothing on rstack to pop"
+    error("nothing on rstack to pop")
     memdump()
 
 proc rcmp =
   try:
     if stack.peek == rstack.peek:
-      stack.push(1)
-    else: stack.push(0)
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
-    echo "ERROR: cannot compare stack and rstack if either is empty"
+    error("cannot compare stack and rstack if either is empty")
     memdump()
   
 proc quote =
@@ -441,35 +479,35 @@ proc qpop() =
   try:
     sstack.push(qstack.pop)
   except:
-    echo "ERROR: nothing on qstack to pop"
+    error("nothing on qstack to pop")
     memdump()
 
 proc exqtop =
   if not qstack.isEmpty:
     executeQuote(qstack.peek)
   else:
-    echo "ERROR: nothing on qstack to peek"
+    error("nothing on qstack to peek")
     memdump()
 
 proc exqpop =
   if not qstack.isEmpty:
     executeQuote(qstack.pop)
   else:
-    echo "ERROR: nothing on qstack to pop"
+    error("nothing on qstack to pop")
     memdump()
 
 proc exc =
   if not qstack.isEmpty:
     discard qstack.pop
   else:
-    echo "ERROR: nothing on qstack to drop"
+    warning("nothing on qstack to drop")
     memdump()
 
 proc deferex =
   if not qstack.isEmpty:
     dreg = qstack.pop
   else:
-    echo "ERROR: nothing on qstack to pop"
+    error("nothing on qstack to pop")
     memdump()
 
 proc dex =
@@ -479,12 +517,12 @@ proc question =
   try:
     discard stack.peek
   except:
-    echo "ERROR: no condition result on stack to pop"
+    error("no condition result on stack to pop")
     memdump()
   try:
     discard qstack.peek
   except:
-    echo "ERROR: no branch on qstack to pop"
+    error("no branch on qstack to pop")
     memdump()
   try:
     if stack.pop > 0:
@@ -492,119 +530,120 @@ proc question =
     else:
       discard qstack.pop
   except:
-    echo "ERROR: syntax"
-    echo "USAGE: cond_result_int ( branch_quote ) ?"
+    error("syntax")
+    usage("cond_result_int ( branch_quote ) ?")
 
 proc questionelse =
   try:
     discard stack.peek
   except:
-    echo "ERROR: no condition result on stack to pop"
+    error("no condition result on stack to pop")
     memdump()
   if qstack.len < 2:
-    echo "ERROR: less than two quotes on qstack"
+    error("less than two quotes on qstack")
     memdump()
   try:
     if stack.pop > 0:
       discard qstack.pop
       executeQuote(qstack.pop)
     else:
-      executeQuote(qstack.pop)
+      let q = qstack.pop
       discard qstack.pop
+      executeQuote(q)
   except:
-    echo "ERROR: syntax"
-    echo "USAGE: cond_result_int ( 1+_branch ) ( 0-_branch ) ?:"
+    error("syntax")
+    usage("cond_result_int ( 1+_branch ) ( 0-_branch ) ?:")
 
 proc gt0 =
   try:
     if stack.peek > 0:
-      stack.push(1)
-    else: stack.push(0)
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
-    echo "ERROR: nothing on stack to compare"
+    error("nothing on stack to compare")
     memdump()
 
 proc lt0 =
   try:
     if stack.peek < 0:
-      stack.push(1)
-    else: stack.push(0)
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
-    echo "ERROR: nothing on stack to compare"
+    error("nothing on stack to compare")
     memdump()
 
 proc eq0 =
   try:
     if stack.peek == 0:
-      stack.push(1)
-    else: stack.push(0)
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
-    echo "ERROR: nothing on stack to compare"
+    error("nothing on stack to compare")
     memdump()
 
 proc land() =
   try:
     if stack.pop + stack.pop == 2:
-      stack.push(1)
-    else: stack.push(0)
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
-    echo "ERROR: less than two values on stack"
+    error("less than two values on stack")
     memdump()
   
 proc lor() =
   try:
     let t = stack.pop + stack.pop
     if t == 1 or t == 2:
-      stack.push(1)
-    else: stack.push(0)
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
-    echo "ERROR: less than two values on stack"
+    error("less than two values on stack")
     memdump()
   
 proc lxor() =
   try:
     if stack.pop + stack.pop == 1:
-      stack.push(1)
-    else: stack.push(0)
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
-    echo "ERROR: less than two values on stack"
+    error("less than two values on stack")
     memdump()
 
 proc eq =
   try:
     if stack.pop - stack.peek == 0:
-      stack.push(1)  
-    else: stack.push(0)
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
-    echo "ERROR: less than two values on stack"
+    error("less than two values on stack")
     memdump()
 
 proc linv =
   try:
     if stack.pop == 0:
-      stack.push(1)  
-    else: stack.push(0)
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
-    echo "ERROR: nothing on stack"
+    error("nothing on stack")
     memdump()
 
 proc word =
   try:
     discard sstack.peek
   except:
-    echo "ERROR: no proc name provided; nothing on $stack"
+    error("no proc name provided; nothing on $stack")
     memdump()
   try:
     discard qstack.peek
   except:
-    echo "ERROR: cannot declare proc without quote body; nothing on qstack"
+    error("cannot declare proc without quote body; nothing on qstack")
     memdump()
   try:
     let name = sstack.pop.strip
     procs[name] = qstack.pop
     echo fmt"""{name} created"""
   except:
-    echo "ERROR: could not create proc"
+    error("could not create proc")
     memdump()
 
 proc stackDump(s : Stack) =
@@ -633,6 +672,13 @@ proc memDump =
     echo dreg
   echo ""
 
+proc memClear =
+  stack.clear()
+  rstack.clear()
+  sstack.clear()
+  qstack.clear()
+  dreg = """"""
+  
 proc executeQuote(q : string) =
   let return_ptr = token_ptr
   let tokens : seq[string] = q.split(parseRule)
@@ -653,7 +699,8 @@ proc executeQuote(q : string) =
 proc parseToken(token : string) =
   var x : int
   if scanf(token, "$i", x):
-    stack.push(x)
+    let d = newDecimal(token)
+    stack.push(d)
   else:
     if token.len > 0:
       if token[0] == '"':
@@ -668,10 +715,14 @@ proc parseToken(token : string) =
         of "/": divide()
         of "/%": divrem()
         of "%": modulus()
+        of "//": divint()
         of "++": inc()
         of "--": dec()
         of "<<": bsl()
         of ">>": bsr()
+        of "trunc": trunc()
+        of "floor": floor()        
+        of "ceil": ceil()
         of "dup": dup()
         of "drop": drop()
         of "rot": rot()
@@ -707,6 +758,7 @@ proc parseToken(token : string) =
         of "=": eq()
         of "!": linv()
         of "proc": word()
+        of "include": incl()
         of "help": help()
         of "bin": echo "TODO: swap base to BINARY"
         of "hex": echo "TODO: swap base to HEXADECIMAL"
@@ -744,19 +796,48 @@ proc repl =
     else:
       should_end = true
 
+proc incl() =
+  var file : string
+  try:
+    file = sstack.pop.strip
+    let return_ptr = token_ptr
+    let buffer_swap = buffer
+    let stack_swap = stack
+    let rstack_swap = rstack
+    let sstack_swap = sstack
+    let qstack_swap = qstack
+    let dreg_swap = dreg
+    buffer.setLen(0)
+    memclear()
+    interpret(file)
+    memclear()
+    token_ptr = return_ptr
+    buffer = buffer_swap
+    stack = stack_swap
+    rstack = rstack_swap
+    sstack = sstack_swap
+    qstack = qstack_swap
+    dreg = dreg_swap
+  except:
+    echo fmt"ERROR: could not process {file}"
+    memdump()
+
 proc preprocess(file : string) : string = 
   var processed = """"""
   var line = """"""
-  let raw = open(file)
-  while readLine(raw, line):
-    var i = 0
-    while i < line.len:
-      if line[i] == '#':
-        i = line.len
-      else:
-        processed.add(line[i])
-        i += 1
-    processed.add(' ')
+  try:
+    let raw = open(file)
+    while readLine(raw, line):
+      var i = 0
+      while i < line.len:
+        if line[i] == '#':
+          i = line.len
+        else:
+          processed.add(line[i])
+          i += 1
+      processed.add(' ')
+  except:
+    echo fmt"ERROR: cannot read file {file}"
   return processed
 
 proc interpret(file : string) =
@@ -780,6 +861,21 @@ proc interpret(file : string) =
 proc compile(file : string) =
   echo "TODO: add file compiler to asm or nim"
 
+proc error(text : string) =
+  styledEcho styleBright, fgRed, "ERROR:", resetStyle, fmt" {text}"
+  
+proc warning(text : string) =
+  styledEcho styleBright, fgYellow, "WARNING:", resetStyle, fmt" {text}"
+
+proc pass(text : string) =
+  echo "TODO"
+
+proc fail(text : string) =
+  echo "TODO"
+  
+proc usage(text : string) =
+  styledEcho styleBright, fgCyan, "USAGE:", resetStyle, fmt" {text}"
+  
 if isMainModule:
   let params = commandLineParams()
   if params.len == 0:

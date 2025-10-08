@@ -1,6 +1,6 @@
 "decToBin" ( eq0
   ( 0 swap drop )
-  ( dup >r 2 % r> swap >r 2 / decToBin 10 * r> + )
+  ( dup >r 2 % r> swap >r 2 // decToBin 10 * r> + )
   ?:
 ) proc
 

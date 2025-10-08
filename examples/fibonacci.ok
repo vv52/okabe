@@ -1,3 +1,5 @@
+# Calculate fibonacci number at n position
+
 "fib" ( eq0 !
   ( 1 = swap 2 = rot |
     ( drop 1 )
@@ -6,12 +8,18 @@
   ?
 ) proc
 
+
+
+# Print fibonacci numbers from 0 to n
+
 "fibSeq" ( ++ >r 0
   ( dup rcmp !
     ( fib . ++ ' )
   ?
   ) ' r> - drop drop
 ) proc
+
+
 
 "The fifth number in the fibonacci sequence is: " $
 5 fib .
