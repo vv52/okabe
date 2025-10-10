@@ -1,5 +1,5 @@
 import std/[strutils, strscans, strformat, strtabs]
-import std/[algorithm, sequtils, re]
+import std/[algorithm, sequtils, tables, re]
 import std/[cmdline, terminal, osproc]
 import stacks, decimal
 
@@ -108,6 +108,16 @@ proc eq() : void
 docs["="] = ("( a b -- a c ) if a is equal to b, c is 1, otherwise c is 0")
 proc linv() : void
 docs["!"] = ("( a -- b ) if a is 1, b is 0; if a is 0, b is 1")
+proc map1() : void
+docs["map"] = ("[ a b c -- d e f ] d, e, and f are a, b, and c after top of quote stack is applied to each individually")
+proc map2() : void
+docs["map2"] = ("[ a b c d -- e f g h ] apply top of quote stack to a and b, producing e and f, etc")
+proc map4() : void
+docs["map4"] = ("[ a b c d -- e f g h ] apply top of quote stack to a b c and d, producing e f g and h, etc")
+proc array() : void
+docs["["] = "[ a b c ] creates an anonymous array in memory"
+proc store() : void
+docs["store"] = "$( s -- ) pop string stack, pop internal array stack, store array in memory at string"
 proc word() : void
 docs["proc"] = "$( s -- ) ()( q -- ) make new word from top of string stack that does top of qstack"
 proc cmd() : void
@@ -125,6 +135,7 @@ proc error(text : string) : void
 proc warning(text : string) : void
 proc usage(text : string) : void
 proc info(text : string) : void
+proc todo(text : string) : void
 proc pass(text : string) : void
 proc fail(text : string) : void
 
@@ -136,6 +147,8 @@ var stack = newStack[DecimalType](capacity = 64)     # THE stack
 var rstack = newStack[DecimalType](capacity = 64)    # rstack for forth algs
 var sstack = newStack[string](capacity = 64) # stack for string literals
 var qstack = newStack[string](capacity = 64) # stack for quoted code in conditionals and processes
+var arrays = newStack[seq[DecimalType]](capacity = 16)
+# var sarrays = newStack[seq[string]](capacity = 16)
 
 var dreg : string
 var buffer : seq[string]
@@ -144,6 +157,7 @@ var iftokens : seq[string]
 # var ofbuffer : string
 
 var procs = newStringTable()
+var namedArrays = initTable[string, seq[DecimalType]]()
 
 var tokenPtr : int = 0
 
@@ -631,6 +645,93 @@ proc linv =
     error("nothing on stack")
     memDump()
 
+proc map1 =
+  var a = arrays.pop
+  var i : int = 0
+  while i < a.len:
+    stack.push(a[i])
+    executeQuote(qstack.peek)
+    a[i] = stack.pop
+    i += 1
+  discard qstack.pop
+  arrays.push(a)
+  echo arrays.peek
+
+proc map2 =
+  var a = arrays.pop
+  var b : seq[DecimalType]
+  var i : int = 0
+  while i < a.len:
+    stack.push(a[i])
+    stack.push(a[i + 1])
+    executeQuote(qstack.peek)
+    b.add(stack.pop)
+    i += 2
+  discard qstack.pop
+  arrays.push(b)
+  echo arrays.peek
+
+proc map4 =
+  var a = arrays.pop
+  var i : int = 0
+  while i < a.len:
+    stack.push(a[i])
+    stack.push(a[i + 1])
+    stack.push(a[i + 2])
+    stack.push(a[i + 3])
+    executeQuote(qstack.peek)
+    a[i + 3] = stack.pop
+    a[i + 2] = stack.pop
+    a[i + 1] = stack.pop
+    a[i] = stack.pop
+    i += 4
+  discard qstack.pop
+  arrays.push(a)
+  echo arrays.peek
+
+proc array =
+  tokenPtr += 1
+  try:
+    if buffer[tokenPtr] == "]":
+      return
+    # var stringArray = false
+    var f : float
+    var arrayContents : seq[DecimalType]
+    # var sarrayContents : seq[string]
+    # if buffer[tokenPtr][0] == '"':
+      # stringArray = true
+    var endArray = false
+    while not endArray:
+      if buffer[tokenPtr].len > 0:
+        # if stringArray:
+          # sarrayContents.add(buffer[tokenPtr])
+        # else:
+          # if scanf(buffer[tokenPtr], "$f", f):
+          #   arrayContents.add(newDecimal(buffer[tokenPtr]))
+          # else: raise newException(ArithmeticDefect, "arithmetic error")
+        if scanf(buffer[tokenPtr], "$f", f):
+          arrayContents.add(newDecimal(buffer[tokenPtr]))
+        else: raise newException(ArithmeticDefect, "arithmetic error")
+      tokenPtr += 1
+      if buffer[tokenPtr] == "]":
+        endArray = true
+    # if stringArray:
+    #   sarrays.push(sarrayContents)
+    # else:
+    #   arrays.push(arrayContents)
+      if arrayContents.len > 0:
+        arrays.push(arrayContents)
+  except:
+    error("invalid array")
+    warning(fmt"""problem at [{tokenPtr}]: "{buffer[token_ptr]}"""")
+    while buffer[tokenPtr] != "]":
+      tokenPtr += 1
+
+proc store =
+  var name = sstack.pop
+  namedArrays[name] = arrays.pop
+  info(fmt"""{namedArrays[name]} stored at "{name}"""")
+
 proc word =
   try:
     discard sstack.peek
@@ -770,17 +871,25 @@ proc parseToken(token : string) =
         of "x|": lxor()
         of "=": eq()
         of "!": linv()
+        of "map": map1()
+        of "map2": map2()
+        of "map4": map4()
+        of "[": array()
+        of "store": store()
         of "proc": word()
         of "cmd": cmd()
         of "include": incl()
         of "help": help()
-        of "bin": echo "TODO: swap base to BINARY"
-        of "hex": echo "TODO: swap base to HEXADECIMAL"
-        of "f": echo "TODO: swap num mode to FLOAT"
-        of "dec": echo "TODO: swap base to DECIMAL"
+        of "bin": todo("swap base to BINARY")
+        of "hex": todo("swap base to HEXADECIMAL")
+        of "f": todo("swap num mode to FLOAT")
+        of "dec": todo("swap base to DECIMAL")
         else:
           if token in procs:
             executeQuote(procs[token])
+          elif token in namedArrays:
+            arrays.push(namedArrays[token])            
+            info(fmt"""{namedArrays[token]} loaded from "{token}"""")
           else: error(fmt""" unknown word "{token}"""")
 
 proc repl =
@@ -884,6 +993,9 @@ proc usage(text : string) =
 proc info(text : string) =
   styledEcho styleDim, fgBlue, fmt"{text}"
   
+proc todo(text : string) =
+  styledEcho styleBright, fgYellow, "TODO:", resetStyle, fmt" {text}"
+
 proc pass(text : string) =
   styledEcho styleBright, fgGreen, "[PASS]", resetStyle, fmt" {text}"
 
