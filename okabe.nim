@@ -1,9 +1,20 @@
 import std/[strutils, strscans, strformat, strtabs]
 import std/[algorithm, sequtils, tables, re]
-import std/[cmdline, terminal, osproc]
+import std/[cmdline, rdstdin, terminal, osproc]
+from std/math import floorMod
 import stacks, decimal
 
 # TODO: ARRAYS, MAP, STRING OPS, ITERATORS, ENUM
+#       make >@ and @> for stack to array and back
+#       get rid of map2 and map4, rename map1 map
+#       introduce mapn to map n items
+#       make both maps just push to stack, then you >@
+#       this allows flexibility to accomodate any resultant size
+#       b>@ would take 1001 and make [ 1 0 0 1 ]
+#       add !0 or !empty or something to check if stack is empty
+#       then like !$ or !$empty etc
+#       @ op to get value at array index
+#       like >@ 1 @ would get the second from top number on stack
 
 var docs = newStringTable()
 
@@ -110,12 +121,14 @@ proc linv() : void
 docs["!"] = ("( a -- b ) if a is 1, b is 0; if a is 0, b is 1")
 proc map1() : void
 docs["map"] = ("[ a b c -- d e f ] d, e, and f are a, b, and c after top of quote stack is applied to each individually")
-proc map2() : void
-docs["map2"] = ("[ a b c d -- e f g h ] apply top of quote stack to a and b, producing e and f, etc")
-proc map4() : void
-docs["map4"] = ("[ a b c d -- e f g h ] apply top of quote stack to a b c and d, producing e f g and h, etc")
+proc mapn() : void
+docs["mapn"] = ("( n -- ) [ a ... -- A ... ] apply top of quote stack to n number of items in array together until array empty, array len must be divisible by n")
 proc array() : void
 docs["["] = "[ a b c ] creates an anonymous array in memory"
+proc toArray() : void
+docs[">@"] = ("( a b c d -- ) [ -- a b c d ]")
+proc fromArray() : void
+docs["@>"] = ("( -- a b c d ) [ a b c d -- ]")
 proc store() : void
 docs["store"] = "$( s -- ) pop string stack, pop internal array stack, store array in memory at string"
 proc word() : void
@@ -651,74 +664,49 @@ proc map1 =
   while i < a.len:
     stack.push(a[i])
     executeQuote(qstack.peek)
-    a[i] = stack.pop
     i += 1
   discard qstack.pop
-  arrays.push(a)
-  echo arrays.peek
 
-proc map2 =
+proc mapn =
+  let freq : int = parseInt($truncate(stack.pop))
   var a = arrays.pop
-  var b : seq[DecimalType]
-  var i : int = 0
-  while i < a.len:
-    stack.push(a[i])
-    stack.push(a[i + 1])
-    executeQuote(qstack.peek)
-    b.add(stack.pop)
-    i += 2
-  discard qstack.pop
-  arrays.push(b)
-  echo arrays.peek
-
-proc map4 =
-  var a = arrays.pop
-  var i : int = 0
-  while i < a.len:
-    stack.push(a[i])
-    stack.push(a[i + 1])
-    stack.push(a[i + 2])
-    stack.push(a[i + 3])
-    executeQuote(qstack.peek)
-    a[i + 3] = stack.pop
-    a[i + 2] = stack.pop
-    a[i + 1] = stack.pop
-    a[i] = stack.pop
-    i += 4
-  discard qstack.pop
-  arrays.push(a)
-  echo arrays.peek
+  if floorMod(a.len, freq) != 0:
+    arrays.push(a)
+    error("array length must be divisible by n")
+    warning("mapn not performed, n consumed, array remains in memory")
+    memDump()
+  else: 
+    var i : int = 0
+    while i < a.len: 
+      stack.push(a[i])
+      i += 1
+      while floorMod(i, freq) != 0:
+        stack.push(a[i])
+        i += 1
+      executeQuote(qstack.peek)
+    discard qstack.pop
 
 proc array =
+  let bufferBackup = buffer
   tokenPtr += 1
   try:
     if buffer[tokenPtr] == "]":
       return
-    # var stringArray = false
     var f : float
     var arrayContents : seq[DecimalType]
-    # var sarrayContents : seq[string]
-    # if buffer[tokenPtr][0] == '"':
-      # stringArray = true
     var endArray = false
     while not endArray:
       if buffer[tokenPtr].len > 0:
-        # if stringArray:
-          # sarrayContents.add(buffer[tokenPtr])
-        # else:
-          # if scanf(buffer[tokenPtr], "$f", f):
-          #   arrayContents.add(newDecimal(buffer[tokenPtr]))
-          # else: raise newException(ArithmeticDefect, "arithmetic error")
         if scanf(buffer[tokenPtr], "$f", f):
           arrayContents.add(newDecimal(buffer[tokenPtr]))
-        else: raise newException(ArithmeticDefect, "arithmetic error")
+        else:
+          echo fmt"so it was YOU {buffer[tokenPtr]}"
+          echo fmt"{buffer[tokenPtr-3]}, {buffer[tokenPtr-2]}, {buffer[tokenPtr-1]}, {buffer[tokenPtr]}, {buffer[tokenPtr+1]}, {buffer[tokenPtr+2]}, {buffer[tokenPtr+3]}"
+          echo buffer
+          raise newException(ArithmeticDefect, "arithmetic error")
       tokenPtr += 1
       if buffer[tokenPtr] == "]":
         endArray = true
-    # if stringArray:
-    #   sarrays.push(sarrayContents)
-    # else:
-    #   arrays.push(arrayContents)
       if arrayContents.len > 0:
         arrays.push(arrayContents)
   except:
@@ -726,6 +714,25 @@ proc array =
     warning(fmt"""problem at [{tokenPtr}]: "{buffer[token_ptr]}"""")
     while buffer[tokenPtr] != "]":
       tokenPtr += 1
+  buffer = bufferBackup
+
+proc toArray =
+  try:
+    let stackContents = stack.toSeq
+    stack.clear
+    arrays.push(stackContents)
+  except:
+    error("cannot declare empty array, nothing on stack")
+    memDump()
+
+proc fromArray =
+  try:
+    let arrayContents = arrays.pop
+    for number in arrayContents:
+      stack.push(number)
+  except:
+    error("nothing to push to stack, no array in memory")
+    memDump()
 
 proc store =
   var name = sstack.pop
@@ -796,6 +803,7 @@ proc memClear =
 proc executeQuote(q : string) =
   let returnPtr = tokenPtr
   let tokens : seq[string] = q.split(parseRule)
+  let bufferBackup = buffer
   buffer = tokens
   tokenPtr = 0
   while tokenPtr < tokens.len:
@@ -809,6 +817,7 @@ proc executeQuote(q : string) =
   tokenPtr = returnPtr
   if interpreting:
     buffer = iftokens
+  buffer = bufferBackup
 
 proc parseToken(token : string) =
   var x : int
@@ -872,9 +881,10 @@ proc parseToken(token : string) =
         of "=": eq()
         of "!": linv()
         of "map": map1()
-        of "map2": map2()
-        of "map4": map4()
+        of "mapn": mapn()
         of "[": array()
+        of ">@": toArray()
+        of "@>": fromArray()
         of "store": store()
         of "proc": word()
         of "cmd": cmd()
@@ -895,7 +905,8 @@ proc parseToken(token : string) =
 proc repl =
   var shouldEnd : bool = false
   while not shouldEnd:
-    let input : string = readLine(stdin)
+    let prompt : string = "> " 
+    let input : string = readLineFromStdin(prompt)
     if input != "quit":
       let tokens : seq[string] = input.split(parseRule)
       buffer = tokens

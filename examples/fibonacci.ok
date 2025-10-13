@@ -3,8 +3,8 @@
 "fib" ( eq0 !
   ( 1 = swap 2 = rot |
     ( drop 1 )
-	( dup >r -- fib r> 2 - fib + )
-	?: )
+    ( dup >r -- fib r> 2 - fib + )
+    ?: )
   ?
 ) proc
 
@@ -15,7 +15,7 @@
 "fibSeq" ( ++ >r 0
   ( dup rcmp !
     ( fib . ++ ' )
-  ?
+    ?
   ) ' r> - drop drop
 ) proc
 

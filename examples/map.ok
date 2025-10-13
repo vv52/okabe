@@ -1,0 +1,17 @@
+"examples/findlcm.ok" include
+"examples/proc.ok" include
+
+"1 2 3 4 5 6 cubed: " $
+[ 1 2 3 4 5 6 ] ( ^3 . ) map
+
+"lcm of 1 2, 3 4, 5 6, 7 8: " $
+[ 1 2 3 4 5 6 7 8 ] ( findlcm top ) 2 mapn
+
+"gcd of each two results from lcm above: " $
+>@ ( findgcd . ) 2 mapn
+
+"1 2 3 converted to array and cubed: " $
+1 2 3 >@ ( ^3 . ) map
+
+"1 2, 3 4, 5 6 added: " $
+[ 1 2 3 4 5 6 ] ( + . ) 2 mapn

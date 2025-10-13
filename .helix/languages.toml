@@ -1,0 +1,13 @@
+[[language]]
+name = "okabe"
+scope = "source.okabe"
+injection-regex = "ok"
+file-types = [
+  "ok"
+]
+comment-token = "#"
+indent = { tab-width = 2, unit = "  " }
+
+[[grammar]]
+name = "okabe"
+source = { git = "https://github.com/vv52/tree-sitter-okabe", rev = "1850c06caa9e10eb62b777bd9d76c0f548e17c98" }

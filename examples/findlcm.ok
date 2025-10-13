@@ -1,11 +1,5 @@
 "examples/findgcd.ok" include
 
-# "findgcd" ( >r eq0
-#   ( drop r> )
-#   ( dup r> swap % swap findgcd )
-#   ?:
-# ) proc
-
 "findlcm" (
   over over findgcd / *
 ) proc
