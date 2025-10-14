@@ -1,0 +1,121 @@
+"examples/raych1.ok" include
+
+"Chapter 2. Drawing on a Canvas" $
+"==============================" $
+
+"rgb" ( proc ) proc
+
+"red" ( 0 ) rgb
+"green" ( 1 ) rgb
+"blue" ( 2 ) rgb
+
+"color" ( >@ ) proc
+
+"Scenario: Colors are (red, green, blue) tuples" $
+"Given c ← color(-0.5, 0.4, 1.7)" $
+-0.5 0.4 1.7 color "c" store
+"Then c.red = -0.5" $
+c red @ -0.5 = yn
+"And c.green = 0.4" $
+c green @ 0.4 = yn
+"And c.blue = 1.7 " $
+c blue @ 1.7 = yn
+
+"-----" $
+memclear
+
+"tAdd3" (
+  @>  blue @ + >r
+     green @ + >r
+       red @ +
+      r> r> >@
+) proc
+
+"tSub3" (
+  @swap
+  @>  blue @ - >r
+     green @ - >r
+       red @ -
+      r> r> >@
+) proc
+
+"sMult3" (
+  dup  blue @ * >r
+  dup green @ * >r
+        red @ *
+       r> r> >@
+) proc
+
+"tMult3" (
+  @>  blue @ * >r
+     green @ * >r
+       red @ *
+      r> r> >@
+) proc
+
+"hadamardProduct" ( tMult3 ) proc
+
+"Scenario: Adding colors" $
+"Given c1 ← color(0.9, 0.6, 0.75)" $
+0.9 0.6 0.75 color "c1" store
+"And c2 ← color(0.7, 0.1, 0.25)" $
+0.7 0.1 0.25 color "c2" store
+"Then c1 + c2 = color(1.6, 0.7, 1.0)" $
+1.6 0.7 1.0 color "cs" store
+c1 c2 tAdd3 cs @cmp yn
+
+"Scenario: Subtracting colors" $
+"Given c1 ← color(0.9, 0.6, 0.75)" $
+0.9 0.6 0.75 color "c1" store
+"And c2 ← color(0.7, 0.1, 0.25)" $
+0.7 0.1 0.25 color "c2" store
+"Then c1 - c2 = color(0.2, 0.5, 0.5)" $
+0.2 0.5 0.5 color "cs" store
+c1 c2 tSub3 cs @cmp yn
+
+"Scenario: Multiplying a color by a scalar" $
+"Given c ← color(0.2, 0.3, 0.4)" $
+0.2 0.3 0.4 color "c" store
+"Then c * 2 = color(0.4, 0.6, 0.8)" $
+0.4 0.6 0.8 color "c2" store
+c 2 sMult3 c2 @cmp yn
+
+"Scenario: Multiplying colors" $
+"Given c1 ← color(1, 0.2, 0.4)" $
+1 0.2 0.4 color "c1" store
+"And c2 ← color(0.9, 1, 0.1)" $
+0.9 1 0.1 color "c2" store
+"Then c1 * c2 = color(0.9, 0.2, 0.04)" $
+0.9 0.2 0.04 color "cs" store
+c1 c2 tMult3 cs @cmp yn
+
+"-----" $
+memclear
+
+# "cWidth" ( 0 ) proc
+# "cHeight" ( 1 ) proc
+
+# "initCanvas" ( * 3 * >r 0 0
+#   ( swap dup over ++ rcmp
+#     ( color )
+#     ( dex )
+#     ?: ) defer
+#   dex "canvas" store
+# ) proc
+
+
+# "Scenario: Creating a canvas" $
+# "Given c ← canvas(10, 20)" $
+# 10 20 initCanvas
+# "Then c.width = 10" $
+# canvas cWidth @ 10 = yn
+# "And c.height = 20" $
+# canvas cHeight @ 20 = yn
+# "And every pixel of c is color(0, 0, 0)" $
+
+# "Scenario: Writing pixels to a canvas" $
+# "Given c ← canvas(10, 20)" $
+# "And red ← color(1, 0, 0)" $
+# "When write_pixel(c, 2, 3, red)" $
+# "Then pixel_at(c, 2, 3) = red" $
+

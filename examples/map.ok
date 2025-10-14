@@ -15,3 +15,25 @@
 
 "1 2, 3 4, 5 6 added: " $
 [ 1 2 3 4 5 6 ] ( + . ) 2 mapn
+
+"Fill array with 0 to 10 and then print each item: " $
+10 >r 0 ( dup ++ rcmp ( >@ ) ( ' ) ?: )
+' ( . ) map
+
+"@toN" ( >r
+  ( dup ++ rcmp
+    ( >@ )
+    ( ' )
+    ?:
+) ' ) proc
+
+"echo0toN" ( @toN ( . ) map ) proc
+
+"Fill array with 0 to 10 with proc: " $
+0 10 @toN
+
+"Print array elements: " $
+@> . . . . . . . . . . .
+
+"Fill array with 0 to 10 and print with proc: " $
+0 10 echo0toN

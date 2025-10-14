@@ -1,1 +1,1 @@
-"nim c --app:console --project --hints:on --warnings:on --styleCheck:hint okabe.nim" cmd
+"nim c -d:release --app:console --project --hints:on --warnings:on --styleCheck:hint okabe.nim" cmd

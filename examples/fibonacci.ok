@@ -1,6 +1,6 @@
 # Calculate fibonacci number at n position
 
-"fib" ( eq0 !
+"fib" ( =0 !
   ( 1 = swap 2 = rot |
     ( drop 1 )
     ( dup >r -- fib r> 2 - fib + )

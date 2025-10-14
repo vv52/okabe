@@ -1,4 +1,4 @@
-"decToBin" ( eq0
+"decToBin" ( =0
   ( 0 swap drop )
   ( dup >r 2 % r> swap >r 2 // decToBin 10 * r> + )
   ?:

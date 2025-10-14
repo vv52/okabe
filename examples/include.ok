@@ -1,1 +1,5 @@
-"Hello from before the include!" "examples/proc.ok" include $
+"Hello from before the include!"
+
+"examples/proc.ok" include
+
+$

@@ -1,4 +1,4 @@
-"fact" ( eq0
+"fact" ( =0
   ( ++ )
   ( dup -- fact * )
   ?:

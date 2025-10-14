@@ -1,4 +1,4 @@
-"findgcd" ( >r eq0
+"findgcd" ( >r =0
   ( drop r> )
   ( dup r> swap % swap findgcd )
   ?:

@@ -4,12 +4,13 @@ import std/[cmdline, rdstdin, terminal, osproc]
 from std/math import floorMod
 import stacks, decimal
 
-# TODO: ARRAYS, MAP, STRING OPS, ITERATORS, ENUM
-#       make >@ and @> for stack to array and back
-#       get rid of map2 and map4, rename map1 map
-#       introduce mapn to map n items
-#       make both maps just push to stack, then you >@
-#       this allows flexibility to accomodate any resultant size
+# TODO: STRING OPS, ITERATORS, ENUM
+# 
+#   New priority: 2D array for raytracer
+#       implement it outside regular arrays
+#       maybe 10 20 array2D
+#       or 10 20 array3D? for x, y, and rgb values
+# 
 #       b>@ would take 1001 and make [ 1 0 0 1 ]
 #       add !0 or !empty or something to check if stack is empty
 #       then like !$ or !$empty etc
@@ -40,6 +41,8 @@ proc modulus() : void
 docs["%"] = "( a b -- c ) a / b, remainder"
 proc divint() : void
 docs["//"] = "( a b -- c ) a / b, floored int"
+proc okSqrt() : void
+docs["sqrt"] = "( a -- √a )"
 proc inc() : void
 docs["++"] = "( a -- b ) b is a + 1"
 proc dec() : void
@@ -68,6 +71,8 @@ proc swap() : void
 docs["swap"] = "( a b -- b a )"
 proc sswap() : void
 docs["$swap"] = "$( s t -- t s )"
+proc aswap() : void
+docs["@swap"] = "@( a1 a2 -- a2 a1 )"
 proc over() : void
 docs["over"] = "( a b -- a b a )"
 proc pick() : void
@@ -103,8 +108,16 @@ proc question() : void
 docs["?"] = ("( b -- ) q( q -- ) pop stack, pop qstack; if greater than 0, execute quote, otherwise discard")
 proc questionelse() : void
 docs["?:"] = ("( b -- ) q( q q -- ) pop stack; if greater than 0, qswap qpop execute qdrop, otherwise qpop execute qdrop")
+proc gt() : void
+docs[">"] = ("( a b -- a t ) if a is greater than b, t is 1, otherwise t is 0")
+proc gteq() : void
+docs[">="] = ("( a b -- a t ) if a is greater than or equal to b, t is 1, otherwise t is 0")
 proc gt0() : void
 docs["gt0"] = ("( a -- a b ) if a is greater than 0, b is 1, otherwise b is 0")
+proc lt() : void
+docs["<"] = ("( a b -- a t ) if a is less than b, t is 1, otherwise t is 0")
+proc lteq() : void
+docs["<="] = ("( a b -- a t ) if a is less than or equal to b, t is 1, otherwise t is 0")
 proc lt0() : void
 docs["lt0"] = ("( a -- a b ) if a is less than 0, b is 1, otherwise b is 0")
 proc eq0() : void
@@ -125,10 +138,16 @@ proc mapn() : void
 docs["mapn"] = ("( n -- ) [ a ... -- A ... ] apply top of quote stack to n number of items in array together until array empty, array len must be divisible by n")
 proc array() : void
 docs["["] = "[ a b c ] creates an anonymous array in memory"
+proc atArrayIndex() : void
+docs["@"] = "[ a ... z ] ( i -- n ) pops the stack and pushes the element at that index from focused array to stack"
 proc toArray() : void
 docs[">@"] = ("( a b c d -- ) [ -- a b c d ]")
 proc fromArray() : void
 docs["@>"] = ("( -- a b c d ) [ a b c d -- ]")
+proc arrayCmp() : void
+docs["@cmp"] = ("compare 2 arrays in memory at the top of the internal array stack, returns 1 to stack if equal, 0 if not")
+proc arrayClear() : void
+docs["@clear"] = ("empties the internal array stack")
 proc store() : void
 docs["store"] = "$( s -- ) pop string stack, pop internal array stack, store array in memory at string"
 proc word() : void
@@ -276,6 +295,13 @@ proc modulus =
     error("division by zero")
   except:
     error("less than two numbers on stack")
+    memDump()
+
+proc okSqrt =
+  try:
+    stack.push(sqrt(stack.pop))
+  except:
+    error("nothing on stack")
     memDump()
 
 proc inc =
@@ -585,9 +611,49 @@ proc questionelse =
     error("syntax")
     usage("cond_result_int ( 1+_branch ) ( 0-_branch ) ?:")
 
+proc gt =
+  try:
+    let lower = stack.pop
+    if stack.peek > lower:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
+  except:
+    error("nothing on stack to compare")
+    memDump()
+
+proc gteq =
+  try:
+    let lower = stack.pop
+    if stack.peek >= lower:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
+  except:
+    error("nothing on stack to compare")
+    memDump()
+
 proc gt0 =
   try:
     if stack.peek > 0:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
+  except:
+    error("nothing on stack to compare")
+    memDump()
+
+proc lt =
+  try:
+    let higher = stack.pop
+    if stack.peek < higher:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
+  except:
+    error("nothing on stack to compare")
+    memDump()
+
+proc lteq =
+  try:
+    let higher = stack.pop
+    if stack.peek <= higher:
       stack.push(newDecimal(1))
     else: stack.push(newDecimal(0))
   except:
@@ -601,6 +667,15 @@ proc lt0 =
     else: stack.push(newDecimal(0))
   except:
     error("nothing on stack to compare")
+    memDump()
+
+proc eq =
+  try:
+    if stack.pop - stack.peek == 0:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
+  except:
+    error("less than two values on stack")
     memDump()
 
 proc eq0 =
@@ -634,15 +709,6 @@ proc lor() =
 proc lxor() =
   try:
     if stack.pop + stack.pop == 1:
-      stack.push(newDecimal(1))
-    else: stack.push(newDecimal(0))
-  except:
-    error("less than two values on stack")
-    memDump()
-
-proc eq =
-  try:
-    if stack.pop - stack.peek == 0:
       stack.push(newDecimal(1))
     else: stack.push(newDecimal(0))
   except:
@@ -707,14 +773,28 @@ proc array =
       tokenPtr += 1
       if buffer[tokenPtr] == "]":
         endArray = true
-      if arrayContents.len > 0:
-        arrays.push(arrayContents)
+    if arrayContents.len > 0:
+      arrays.push(arrayContents)
   except:
     error("invalid array")
     warning(fmt"""problem at [{tokenPtr}]: "{buffer[token_ptr]}"""")
     while buffer[tokenPtr] != "]":
       tokenPtr += 1
   buffer = bufferBackup
+
+proc atArrayIndex =
+  try:
+    let index = parseInt($stack.pop.truncate)
+    if index >= arrays.peek.len or index < 0:
+      error("specified index outside bounds of array")
+      warning(fmt"{index} not in 0..{arrays.peek.len - 1}")
+    else:
+      let item = arrays.peek[index]
+      stack.push(item)
+  except:
+    error("requires an int index on top stack and an active array")
+    usage("2 @   would push 7 to stack with array [ 5 6 7 8 ]")
+    memDump()
 
 proc toArray =
   try:
@@ -732,6 +812,32 @@ proc fromArray =
       stack.push(number)
   except:
     error("nothing to push to stack, no array in memory")
+    memDump()
+
+proc arrayCmp =
+  try:
+    let aTop = arrays.pop
+    let a2nd = arrays.pop
+    if aTop.toSeq == a2nd.toSeq:
+      stack.push(newDecimal(1))
+    else:
+      stack.push(newDecimal(0))
+    arrays.push(a2nd)
+  except:
+    error("cannot compare arrays, must have at least two arrays loaded onto array stack")
+    memDump()
+
+proc arrayClear =
+  arrays.clear
+
+proc aswap =
+  try:
+    let a1 = arrays.pop
+    let a2 = arrays.pop
+    arrays.push(a1)
+    arrays.push(a2)
+  except:
+    error("less than two arrays on @stack")
     memDump()
 
 proc store =
@@ -791,6 +897,9 @@ proc memDump =
   if dreg != "":
     echo "DREG"
     echo dreg
+  if not arrays.isEmpty:
+    echo "\nARRAYS"
+    stackDump(arrays)
   echo ""
 
 proc memClear =
@@ -799,6 +908,7 @@ proc memClear =
   sstack.clear()
   qstack.clear()
   dreg = """"""
+  arrays.clear()
   
 proc executeQuote(q : string) =
   let returnPtr = tokenPtr
@@ -839,6 +949,7 @@ proc parseToken(token : string) =
         of "/%": divrem()
         of "%": modulus()
         of "//": divint()
+        of "sqrt": okSqrt()
         of "++": inc()
         of "--": dec()
         of "<<": bsl()
@@ -872,28 +983,37 @@ proc parseToken(token : string) =
         of "dex": dex()
         of "?": question()
         of "?:": questionelse()
-        of "gt0": gt0()
-        of "lt0": lt0()
-        of "eq0": eq0()
+        of ">": gt()
+        of ">=": gteq()
+        of ">0": gt0()
+        of "<": lt()
+        of "<=": lteq()
+        of "<0": lt0()
+        of "=": eq()
+        of "=0": eq0()
         of "&": land()
         of "|": lor()
         of "x|": lxor()
-        of "=": eq()
         of "!": linv()
         of "map": map1()
         of "mapn": mapn()
         of "[": array()
+        of "@": atArrayIndex()
         of ">@": toArray()
         of "@>": fromArray()
+        of "@cmp": arrayCmp()
+        of "@clear": arrayClear()
+        of "@swap": aswap()
         of "store": store()
         of "proc": word()
         of "cmd": cmd()
+        of "memclear": memClear()
+        of "memdump": memDump()
         of "include": incl()
         of "help": help()
-        of "bin": todo("swap base to BINARY")
-        of "hex": todo("swap base to HEXADECIMAL")
-        of "f": todo("swap num mode to FLOAT")
-        of "dec": todo("swap base to DECIMAL")
+        of "apd": todo("swap to standard arbitrary precision decimal context")
+        of "int": todo("swap to integer context")
+        of "float": todo("swap to floating point context")
         else:
           if token in procs:
             executeQuote(procs[token])

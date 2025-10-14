@@ -1,0 +1,315 @@
+"point" ( 1 >@ ) proc # ( x y z -- ) [ -- x y z 1 ]
+"vec" ( 0 >@ ) proc # ( x y z -- ) [ -- x y z 0 ]
+
+"isPoint" ( 3 @ ) proc # [ x y z w ] returns w, if 1, @ is a point, if 0, @ is not a point
+"isVec" ( 3 @ ! ) proc # [ x y z w ] returms not w, if 1, @ is a vec, if 0, @ is not a vec
+
+"isPointYN" ( isPoint ( "yes" ) ( "no" ) ?: $ ) proc # convenience proc to call isPoint and echo yes or no
+"isVecYN" ( isVec ( "yes" ) ( "no" ) ?: $ ) proc # convenience proc to call isVec and echo yes or no
+
+"x" ( 0 ) proc
+"y" ( 1 ) proc
+"z" ( 2 ) proc
+"w" ( 3 ) proc
+
+"Chapter 1. Tuples, Points, and Vectors" $
+
+"-----" $
+
+"Scenario: A tuple with w=1.0 is a point" $
+"Given a ← tuple(4.3, -4.2, 3.1, 1.0)" $
+4.3 -4.2 3.1 1.0 point
+"a.x = " $ x @ .
+"a.y = " $ y @ .
+"a.z = " $ z @ .
+"a.w = " $ w @ .
+"a is a point" $ isPointYN
+"a is a vector" $ isVecYN
+
+"Scenario: A tuple with w=0.0 is a vector" $
+"Given a ← tuple(4.3, -4.2, 3.1, 0.0)" $
+4.3 -4.2 3.1 0.0 point
+"a.x = " $ x @ .
+"a.y = " $ y @ .
+"a.z = " $ z @ .
+"a.w = " $ w @ .
+"a is a point" $ isPointYN
+"a is a vector" $ isVecYN
+
+"-----" $
+
+"Scenario: point creates tuples with w=1" $
+"Given p ← 4 -4 3 point" $
+4 -4 3 point "p" store
+"Then p = [ 4 -4 3 1 ]" $
+[ 4 -4 3 1 ] p @cmp ( "yes" ) ( "no" ) ?: $
+
+"Scenario: vec creates tuples with w=0" $
+"Given v ← 4 -4 3 vec" $
+4 -4 3 vec "v" store
+"Then v = [ 4 -4 3 0 ]" $
+[ 4 -4 3 0 ] v @cmp ( "yes" ) ( "no" ) ?: $
+
+"-----" $
+
+"abs" ( <0 ( -1 * ) ? ) proc
+"EPSILON" ( 0.00001 ) proc
+"fuzzEq" ( over - abs EPSILON < drop ) proc # ( a b -- t ) abs(a-b) < 0.00001
+
+"Test floating point equivalence function fuzzEq" $
+"Are 0.001 and 0 'equal'? (fuzzEq): " $
+0.001 0 fuzzEq ( "yes" ) ( "no" ) ?: $
+
+drop
+
+"-----" $
+
+"tAdd4" (
+  @> w @ + >r
+     z @ + >r
+     y @ + >r
+     x @ +
+     r> r> r> >@
+) proc
+
+"yn" ( ( "yes" ) ( "no" ) ?: $ ) proc
+
+"Scenario: Adding two tuples" $
+"Given a1 ← [ 3 -2 5 1 ]" $
+[ 3 -2 5 1 ] "a1" store
+"And a2 ← [ -2 3 1 0 ]" $
+[ -2 3 1 0 ] "a2" store
+"Then a1 + a2 = [ 1 1 6 1 ]" $
+a1 a2 tAdd4 [ 1 1 6 1 ] @cmp yn
+
+"-----" $
+
+"tSub4" (
+  @swap
+  @> w @ - >r
+     z @ - >r
+     y @ - >r
+     x @ -
+     r> r> r> >@
+) proc
+
+"Scenario: Subtracting two points" $
+"Given p1 ← 3 2 1 point" $
+3 2 1 point "p1" store
+"And p2 ← 5 6 7 point" $
+5 6 7 point "p2" store
+"Then p1 - p2 = -2 -4 -6 vec" $
+-2 -4 -6 vec "v" store
+p1 p2 tSub4 v @cmp yn
+isVec yn
+
+"Scenario: Subtracting a vector from a point" $
+"Given p ← 3 2 1 point" $
+3 2 1 point "p" store
+"And v ← 5 6 7 vec" $
+5 6 7 vec "v" store
+"Then p - v = -2 -4 -6 point" $
+-2 -4 -6 point "np" store
+p v tSub4 np @cmp yn
+isPoint yn
+
+"Scenario: Subtracting two vectors" $
+"Given v1 ← 3 2 1 vec" $
+3 2 1 vec "v1" store
+"And v2 ← 5 6 7 vec" $
+5 6 7 vec "v2" store
+"Then v1 - v2 = -2 -4 -6 vec" $
+-2 -4 -6 vec "v3" store
+v1 v2 tSub4 v3 @cmp yn
+isVec yn
+
+"-----" $
+
+"Scenario: Subtracting a vector from the zero vector" $
+"Given zero ← 0 0 0 vec" $
+0 0 0 vec "zero" store
+"And v ← 1 -2 3 vec" $
+1 -2 3 vec "v" store
+"Then zero - v = -1 2 -3 vec" $
+-1 2 -3 vec "nv" store
+zero v tSub4 nv @cmp yn
+isVec yn
+
+"tNeg4" (
+  [ 0 0 0 0 ] @swap tSub4
+) proc
+
+"Scenario: Negating a tuple" $
+"Given a ← [ 1 -2 3 -4 ]" $
+[ 1 -2 3 -4 ] "a" store
+"Then -a = [ -1 2 -3 4 ]" $
+[ -1 2 -3 4 ] "-a" store
+a tNeg4 -a @cmp yn
+
+"-----" $
+
+"sMult4" (
+  dup w @ * >r
+  dup z @ * >r
+  dup y @ * >r
+      x @ *
+  r> r> r> >@
+) proc
+
+"Scenario: Multiplying a tuple by a scalar" $
+"Given a ← [ 1 -2 3 -4 ]" $
+[ 1 -2 3 -4 ] "a" store
+"Then a * 3.5 = [ 3.5 -7 10.5 -14 ]" $
+[ 3.5 -7 10.5 -14 ] "st" store
+a 3.5 sMult4 st @cmp yn
+
+"Scenario: Multiplying a tuple by a fraction" $
+"Given a ← [ 1 -2 3 -4 ]" $
+[ 1 -2 3 -4 ] "a" store
+"Then a * 0.5 = [ 0.5 -1 1.5 -2 ]" $
+[ 0.5 -1 1.5 -2 ] "st" store
+a 0.5 sMult4 st @cmp yn
+
+"sDiv4" (
+  w @ over / >r
+  z @ over / >r
+  y @ over / >r
+  x @ swap /
+  r> r> r> >@
+) proc
+
+"Scenario: Dividing a tuple by a scalar" $
+"Given a ← tuple(1, -2, 3, -4)" $
+[ 1 -2 3 -4 ] "a" store
+"Then a / 2 = tuple(0.5, -1, 1.5, -2)" $
+[ 0.5 -1 1.5 -2 ] "st" store
+a 2 sDiv4 st @cmp yn
+
+"-----" $
+
+"^2" ( dup * ) proc
+
+"mag" (
+  x @ ^2
+  y @ ^2 +
+  z @ ^2 +
+  sqrt
+) proc
+
+"Scenario: Computing the magnitude of 1 0 0 vec" $
+"Given v ← 1 0 0 vec" $
+1 0 0 vec "v" store
+"Then magnitude(v) = 1" $
+v mag 1 = yn
+
+drop
+"Scenario: Computing the magnitude of 0 1 0 vec" $
+"Given v ← vector(0, 1, 0)" $
+0 1 0 vec "v" store
+"Then magnitude(v) = 1" $
+v mag 1 = yn
+
+drop
+"Scenario: Computing the magnitude of 0 0 1 vec" $
+"Given v ← vector(0, 0, 1)" $
+0 0 1 vec "v" store
+"Then magnitude(v) = 1" $
+v mag 1 = yn
+
+drop
+"Scenario: Computing the magnitude of 1 2 3 vec" $
+"Given v ← vector(1, 2, 3)" $
+1 2 3 vec "v" store
+"Then magnitude(v) = √14" $
+v mag 14 sqrt = yn
+
+drop
+"Scenario: Computing the magnitude of -1 -2 -3 vec" $
+"Given v ← vector(-1, -2, -3)" $
+-1 -2 -3 vec "v" store
+"Then magnitude(v) = √14" $
+v mag 14 sqrt = yn
+
+drop
+"-----" $
+
+"norm" (
+  z @ mag / >r
+  y @ mag / >r
+  x @ mag /
+  r> r> vec
+) proc
+
+"Scenario: Normalizing vector(4, 0, 0) gives (1, 0, 0)" $
+"Given v ← vector(4, 0, 0)" $
+4 0 0 vec "v" store
+"Then normalize(v) = vector(1, 0, 0)" $
+1 0 0 vec "nv" store
+v norm nv @cmp yn
+
+"invSqrt" (
+  1 swap sqrt /
+) proc
+
+"Scenario: Normalizing vector(1, 2, 3)" $
+"Given v ← vector(1, 2, 3)" $
+1 2 3 vec "v" store
+"Then normalize(v) = approximately vector(1/√ 14, 2/√ 14, 3/√ 14)" $
+14 invSqrt 14 invSqrt 2 * 14 invSqrt 3 * vec "nv" store
+v norm nv @cmp yn
+
+"Scenario: The magnitude of a normalized vector" $
+"Given v ← vector(1, 2, 3)" $
+1 2 3 vec "v" store
+"When n ← normalize(v)" $
+v norm "n" store
+"Then magnitude(n) = 1" $
+n mag 1 fuzzEq yn
+
+drop
+
+"-----" $
+
+"dot4" (
+  @> w @ * >r
+     z @ * >r
+     y @ * >r
+     x @ *
+     r> r> r>
+     +  +  +
+) proc
+
+"Scenario: The dot product of two tuples" $
+"Given a ← vector(1, 2, 3)" $
+1 2 3 vec "a" store
+"And b ← vector(2, 3, 4)" $
+2 3 4 vec "b" store
+"Then dot(a, b) = 20" $
+a b dot4 20 = yn
+
+"-----" $
+memclear
+
+"cross" (
+  @> drop # b on stack with b.z on top
+          # a on @stack
+     2 pick # ( x y z -- x y z x )
+     2 pick # ( x y z -- x y z x y )
+     2 pick # ( x y z -- x y z x y z )
+     y @ * swap z @ * - >r # a.y * b.z - a.z * b.y
+     z @ * swap x @ * - >r # a.z * b.x - a.x * b.z
+     x @ * swap y @ * -    # a.x * b.y - a.y * b.x
+     r> r> vec
+) proc
+
+"Scenario: The cross product of two vectors" $
+"Given a ← vector(1, 2, 3)" $
+1 2 3 vec "a" store
+"And b ← vector(2, 3, 4)" $
+2 3 4 vec "b" store
+"Then cross(a, b) = vector(-1, 2, -1)" $
+-1 2 -1 vec "v" store
+a b cross v @cmp yn
+"And cross(b, a) = vector(1, -2, 1)" $
+1 -2 1 vec "-v" store
+b a cross -v @cmp yn

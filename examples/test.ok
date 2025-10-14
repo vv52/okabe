@@ -1,7 +1,0 @@
-"examples/countdown.ok" include
-"examples/include.ok" include
-"examples/decToBin.ok" include
-"examples/factorial.ok" include
-"examples/fibonacci.ok" include
-"examples/findlcm.ok" include
-"all examples have completed :)" $
