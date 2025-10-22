@@ -10,4 +10,4 @@ indent = { tab-width = 2, unit = "  " }
 
 [[grammar]]
 name = "okabe"
-source = { git = "https://github.com/vv52/tree-sitter-okabe", rev = "1850c06caa9e10eb62b777bd9d76c0f548e17c98" }
+source = { git = "https://github.com/vv52/tree-sitter-okabe", rev = "986dce4273902cf7340a63b73e34951a1f2e175b" }

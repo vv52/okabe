@@ -9,20 +9,7 @@
 "green" ( 1 ) rgb
 "blue" ( 2 ) rgb
 
-"color" ( >@ ) proc
-
-"Scenario: Colors are (red, green, blue) tuples" $
-"Given c ← color(-0.5, 0.4, 1.7)" $
--0.5 0.4 1.7 color "c" store
-"Then c.red = -0.5" $
-c red @ -0.5 = yn
-"And c.green = 0.4" $
-c green @ 0.4 = yn
-"And c.blue = 1.7 " $
-c blue @ 1.7 = yn
-
-"-----" $
-memclear
+"color" ( >@ store ) proc
 
 "tAdd3" (
   @>  blue @ + >r
@@ -55,67 +42,247 @@ memclear
 
 "hadamardProduct" ( tMult3 ) proc
 
+"initCanvas" (
+  "cHeight" var
+  3 * "cWidth" var
+  cHeight cWidth
+  "canvas" @new
+) proc
+
+"writePixel" ( 
+  "canvas" over 3 *     over red   @ -rot store2d
+  "canvas" over 3 * 1 + over green @ -rot store2d
+  "canvas" over 3 * 2 + over blue  @ -rot store2d
+) proc
+
+"pixelAt" (
+  "canvas"
+  over red   + over @2d >r
+  over green + over @2d >r
+  over blue  + over @2d
+  r> r> swap rot $drop
+) proc
+
+"printCanvas" (
+  "canvas"
+  0 "i" var
+  0 "j" var
+  ( j cHeight <
+    ( i cWidth <
+      ( i j pixelAt
+        swap rot
+        "i, j: (" i 3 // to$ & ", " & j to$ & ")" & $
+        "r: " to$ &
+        ", g: " & to$ &
+        ", b: " & to$ & $
+        i 3 + "i" var ' )
+      ( 0 "i" var
+        j 1 + "j" var ' )
+      ?: )
+    ?
+  ) '
+) proc
+
+"scaleDecToBitVal" (
+  255 * 255 >
+    ( drop 255 )
+    ( 0 <
+      ( drop 0 )
+      ( ceil )
+      ?: )
+    ?:
+) proc
+
+"writeCanvasToPPM" (
+  "test.ppm" file
+  "P3" fwriteln
+  cWidth 3 // to$ " " & cHeight to$ & fwriteln
+  "255" fwriteln
+  0 "i" var
+  0 "j" var
+  ( j cHeight <
+    ( i cWidth <
+      ( i j pixelAt
+        swap rot " "
+        scaleDecToBitVal to$ & " " & 
+        scaleDecToBitVal to$ & " " &
+        scaleDecToBitVal to$ &
+        d>$ $swap & $>d
+        i 3 + "i" var ' )
+      ( d>$ fWriteLn
+        clear
+        0 "i" var
+        j ++ "j" var ' )
+      ?: )
+    ?
+  ) ' close clear
+) proc
+
+"checkPPMLineLength" (
+  d>$ $len $swap $len + 70 <
+    ( & )
+    ( $swap fWriteLn )
+    ?: $>d drop
+) proc
+          
+"writeCanvasToPPMSafe" (
+  "testSafe.ppm" file
+  "P3" fwriteln
+  cWidth 3 // to$ " " & cHeight to$ & fwriteln
+  "255" fwriteln
+  0 "i" var
+  0 "j" var
+  ( j cHeight <
+    ( i cWidth <
+      ( i j pixelAt
+        swap rot
+        " " scaleDecToBitVal to$ & 
+        checkPPMLineLength
+        " " scaleDecToBitVal to$ & 
+        checkPPMLineLength
+        " " scaleDecToBitVal to$ & 
+        checkPPMLineLength
+        i 3 + "i" var ' )
+      ( d>$ fWriteLn
+        clear
+        0 "i" var
+        j ++ "j" var ' )
+      ?: )
+    ?
+  ) ' "" fWriteLn close clear
+) proc
+
+"fillCanvas" (
+  "canvas"
+  cWidth 3 // "pixelWidth" var
+  0 "i" var
+  0 "j" var
+  ( j cHeight <
+    ( i pixelWidth <
+      ( i j writePixel
+        i ++ "i" var ' )
+      ( 0 "i" var
+        j ++ "j" var ' )
+      ?: )
+    ?
+  ) '
+) proc
+
+private
+
+---
+
+"Scenario: Colors are (red, green, blue) tuples" $
+"Given c ← color(-0.5, 0.4, 1.7)" $
+-0.5 0.4 1.7 "c" color
+"Then c.red = -0.5" $
+c red @ -0.5 = yn
+"And c.green = 0.4" $
+c green @ 0.4 = yn
+"And c.blue = 1.7 " $
+c blue @ 1.7 = yn
+
+---
+
 "Scenario: Adding colors" $
 "Given c1 ← color(0.9, 0.6, 0.75)" $
-0.9 0.6 0.75 color "c1" store
+0.9 0.6 0.75 "c1" color
 "And c2 ← color(0.7, 0.1, 0.25)" $
-0.7 0.1 0.25 color "c2" store
+0.7 0.1 0.25 "c2" color
 "Then c1 + c2 = color(1.6, 0.7, 1.0)" $
-1.6 0.7 1.0 color "cs" store
+1.6 0.7 1.0 "cs" color
 c1 c2 tAdd3 cs @cmp yn
 
 "Scenario: Subtracting colors" $
 "Given c1 ← color(0.9, 0.6, 0.75)" $
-0.9 0.6 0.75 color "c1" store
+0.9 0.6 0.75 "c1" color
 "And c2 ← color(0.7, 0.1, 0.25)" $
-0.7 0.1 0.25 color "c2" store
+0.7 0.1 0.25 "c2" color
 "Then c1 - c2 = color(0.2, 0.5, 0.5)" $
-0.2 0.5 0.5 color "cs" store
-c1 c2 tSub3 cs @cmp yn
+0.2 0.5 0.5 "cs" color
+c1 c2 tSub3 "result" store
+result cs @cmp yn
 
 "Scenario: Multiplying a color by a scalar" $
 "Given c ← color(0.2, 0.3, 0.4)" $
-0.2 0.3 0.4 color "c" store
+0.2 0.3 0.4 "c" color
 "Then c * 2 = color(0.4, 0.6, 0.8)" $
-0.4 0.6 0.8 color "c2" store
+0.4 0.6 0.8 "c2" color
 c 2 sMult3 c2 @cmp yn
 
 "Scenario: Multiplying colors" $
 "Given c1 ← color(1, 0.2, 0.4)" $
-1 0.2 0.4 color "c1" store
+1 0.2 0.4 "c1" color
 "And c2 ← color(0.9, 1, 0.1)" $
-0.9 1 0.1 color "c2" store
+0.9 1 0.1 "c2" color
 "Then c1 * c2 = color(0.9, 0.2, 0.04)" $
-0.9 0.2 0.04 color "cs" store
-c1 c2 tMult3 cs @cmp yn
+0.9 0.2 0.04 "cs" color
+c1 c2 tMult3 "result" store
+result cs @cmp yn
 
-"-----" $
-memclear
+---
 
-# "cWidth" ( 0 ) proc
-# "cHeight" ( 1 ) proc
+"Scenario: Creating a canvas" $
+"Given c ← canvas(10, 20)" $
+10 20 initCanvas
+"Then c.width = 10" $
+cWidth 3 // .
+"And c.height = 20" $
+cHeight .
+"And every pixel of c is color(0, 0, 0)" $
+printCanvas
 
-# "initCanvas" ( * 3 * >r 0 0
-#   ( swap dup over ++ rcmp
-#     ( color )
-#     ( dex )
-#     ?: ) defer
-#   dex "canvas" store
-# ) proc
+---
 
+"Scenario: Writing pixels to a canvas" $
+"Given c ← canvas(10, 20)" $
+10 20 initCanvas
+"And red ← color(1, 0, 0)" $
+1 0 0 "c" color
+"When write_pixel(c, 2, 3, red)" $
+c 2 3 writePixel
+"Then pixel_at(c, 2, 3) = red" $
+2 3 pixelAt red = yn
 
-# "Scenario: Creating a canvas" $
-# "Given c ← canvas(10, 20)" $
-# 10 20 initCanvas
-# "Then c.width = 10" $
-# canvas cWidth @ 10 = yn
-# "And c.height = 20" $
-# canvas cHeight @ 20 = yn
-# "And every pixel of c is color(0, 0, 0)" $
+---
 
-# "Scenario: Writing pixels to a canvas" $
-# "Given c ← canvas(10, 20)" $
-# "And red ← color(1, 0, 0)" $
-# "When write_pixel(c, 2, 3, red)" $
-# "Then pixel_at(c, 2, 3) = red" $
+"Scenario: Constructing the PPM pixel data" $
+"Given c ← canvas(5, 3)" $
+5 3 initCanvas
+"And c1 ← color(1.5, 0, 0)" $
+"c1" 1.5 0 0 color
+"And c2 ← color(0, 0.5, 0)" $
+"c2" 0 0.5 0 color
+"And c3 ← color(-0.5, 0, 1)" $
+"c3" -0.5 0 1 color
+"When write_pixel(c, 0, 0, c1)" $
+c1 0 0 writePixel
+"And write_pixel(c, 2, 1, c2)" $
+c2 2 1 writePixel
+"And write_pixel(c, 4, 2, c3)" $
+c3 4 2 writePixel
+"And ppm ← canvas_to_ppm(c)" $
+writeCanvasToPPM
+"Then lines 4-6 of ppm are" $
+" 255 0 0 0 0 0 0 0 0 0 0 0 0 0 0" $
+" 0 0 0 0 0 0 0 128 0 0 0 0 0 0 0" $
+" 0 0 0 0 0 0 0 0 0 0 0 0 0 0 255" $
+"cat test.ppm" cmd
 
+---
+
+"Scenario: Splitting long lines in PPM files" $
+"Given c ← canvas(10, 2)" $
+10 2 initCanvas
+"When every pixel of c is set to color(1, 0.8, 0.6)" $
+1 0.8 0.6 "c" color
+c fillCanvas 
+"And ppm ← canvas_to_ppm(c)" $
+writeCanvasToPPMSafe
+"Then lines 4-7 of ppm are" $
+" 255 204 153 255 204 153 255 204 153 255 204 153 255 204 153 255 204" $
+" 153 255 204 153 255 204 153 255 204 153 255 204 153" $
+" 255 204 153 255 204 153 255 204 153 255 204 153 255 204 153 255 204" $
+" 153 255 204 153 255 204 153 255 204 153 255 204 153" $
+"And ppm ends with a newline character" $
+"cat testSafe.ppm" cmd

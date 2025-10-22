@@ -1,16 +1,8 @@
 import std/[strutils, strscans, strformat, strtabs]
-import std/[algorithm, math, sequtils, tables, re]
-import std/[cmdline, rdstdin, terminal, osproc, streams]
-import stacks
-
-# TODO: STRING OPS, ITERATORS, ENUM
-# 
-#       b>@ would take 1001 and make [ 1 0 0 1 ]
-#       add !0 or !empty or something to check if stack is empty
-#       then like !$ or !$empty etc
-# 
-      # "$_" possible alias for "fwriteln"
-      # ".$" possible alias for "to$ $"
+import std/[algorithm, sequtils, tables, re]
+import std/[cmdline, rdstdin, terminal, osproc]
+from std/math import floorMod
+import stacks, decimal
 
 var docs = newStringTable()
 
@@ -62,8 +54,6 @@ proc sdrop() : void
 docs["$drop"] = "$( s -- )"
 proc rot() : void
 docs["rot"] = "( a b c -- b c a )"
-proc unrot() : void
-docs["-rot"] = "( b c a -- a b c )"
 proc swap() : void
 docs["swap"] = "( a b -- b a )"
 proc sswap() : void
@@ -92,33 +82,33 @@ proc nested() : string
 proc exqtop() : void
 docs["'"] = ("q( q -- q ) peek qstack and execute quote")
 proc exqpop() : void
-docs["'."] = ("q( q -- ) pop qstack and execute quote")
+docs["ex1"] = ("q( q -- ) pop qstack and execute quote")
 proc exc() : void
-docs["'x"] = ("q( q -- ) drop qstack and discard quote")
+docs["exc"] = ("q( q -- ) drop qstack and discard quote")
 proc deferex() : void
 docs["defer"] = ("q( q -- ) dreg[q] pop qstack and push to dreg")
 proc dex() : void
 docs["dex"] = ("execute quote in dreg")
 proc question() : void
 docs["?"] = ("( b -- ) q( q -- ) pop stack, pop qstack; if greater than 0, execute quote, otherwise discard")
-proc questionElse() : void
+proc questionelse() : void
 docs["?:"] = ("( b -- ) q( q q -- ) pop stack; if greater than 0, qswap qpop execute qdrop, otherwise qpop execute qdrop")
 proc gt() : void
 docs[">"] = ("( a b -- a t ) if a is greater than b, t is 1, otherwise t is 0")
 proc gteq() : void
 docs[">="] = ("( a b -- a t ) if a is greater than or equal to b, t is 1, otherwise t is 0")
 proc gt0() : void
-docs[">0"] = ("( a -- a b ) if a is greater than 0, b is 1, otherwise b is 0")
+docs["gt0"] = ("( a -- a b ) if a is greater than 0, b is 1, otherwise b is 0")
 proc lt() : void
 docs["<"] = ("( a b -- a t ) if a is less than b, t is 1, otherwise t is 0")
 proc lteq() : void
 docs["<="] = ("( a b -- a t ) if a is less than or equal to b, t is 1, otherwise t is 0")
 proc lt0() : void
-docs["<0"] = ("( a -- a b ) if a is less than 0, b is 1, otherwise b is 0")
+docs["lt0"] = ("( a -- a b ) if a is less than 0, b is 1, otherwise b is 0")
 proc eq0() : void
-docs["=0"] = ("( a -- a b ) if a is equal to 0, b is 1, otherwise b is 0")
+docs["eq0"] = ("( a -- a b ) if a is equal to 0, b is 1, otherwise b is 0")
 proc land() : void
-docs["&&"] = ("( t f -- f ) logical and, only returns 1 if both are also 1, otherwise returns 0")
+docs["&"] = ("( t f -- f ) logical and, only returns 1 if both are also 1, otherwise returns 0")
 proc lor() : void
 docs["|"] = ("( t f -- t ) logical or, returns 1 if either is 1, only returns 0 if both are 0")
 proc lxor() : void
@@ -161,24 +151,6 @@ proc word() : void
 docs["proc"] = "$( s -- ) ()( q -- ) make new word from top of string stack that does top of qstack"
 proc cmd() : void
 docs["cmd"] = "$( s -- ) ( -- e ) pop string stack and exec in shell, push exit code to stack and echo output"
-proc openFile() : void
-docs["file"] = "$( filename -- ) open file for reading or writing"
-proc closeFile : void
-docs["close"] = "close current output file"
-proc fWriteLn() : void
-docs["fwriteln"] = "write line to current output file"
-proc toString() : void
-docs["to$"] = "( n -- ) $( -- s ) pops stack and pushes string representation to string stack"
-proc concatenate() : void
-docs["&"] = "$( s1 s2 -- s1&s2 ) concatenates top two strings on string stack in reverse pop order"
-proc clearStack : void
-docs["clear"] = "( a .. n -- ) empties stack"
-proc stringToDReg() : void
-docs["$>d"] = "$( s -- ) d[ -- s ] pops string stack and stores in d reg"
-proc dRegToString() : void
-docs["d>$"] = "$d[ s -- ] $( -- s ) pushes dreg to $stack snd clears dreg"
-proc stringLength() : void
-docs["$len"] = "$( s -- s ) ( -- s.len)"
 proc stackDump(s : Stack) : void
 proc memDump() : void
 proc memClear() : void
@@ -203,11 +175,12 @@ var helpMode = false
 var interpreting = false
 var including = false
 
-var stack = newStack[float](capacity = 64)     # THE stack
-var rstack = newStack[float](capacity = 64)    # rstack for forth algs
+var stack = newStack[DecimalType](capacity = 64)     # THE stack
+var rstack = newStack[DecimalType](capacity = 64)    # rstack for forth algs
 var sstack = newStack[string](capacity = 64) # stack for string literals
 var qstack = newStack[string](capacity = 64) # stack for quoted code in conditionals and processes
-var astack = newStack[seq[float]](capacity = 16)
+var astack = newStack[seq[DecimalType]](capacity = 16)
+# var sarrays = newStack[seq[string]](capacity = 16)
 
 var dreg : string
 var buffer : seq[string]
@@ -216,10 +189,9 @@ var iftokens : seq[string]
 # var ofbuffer : string
 
 var procs = newStringTable()
-var vars = initTable[string, float]()
-var namedArrays = initTable[string, seq[float]]()
-var named2dArrays = initTable[string, seq[seq[float]]]()
-var outputFile : FileStream
+var vars = initTable[string, DecimalType]()
+var namedArrays = initTable[string, seq[DecimalType]]()
+var named2dArrays = initTable[string, seq[seq[DecimalType]]]()
 
 var tokenPtr : int = 0
 
@@ -230,10 +202,7 @@ proc help =
 
 proc dump =
   try:
-    let n = stack.pop
-    if almostEqual(n, n.trunc):
-      echo n.toInt
-    else: echo n
+    echo stack.pop
   except:
     error("nothing on stack to pop")
     memDump()
@@ -281,10 +250,10 @@ proc mul =
 
 proc divint = 
   try:
-    let a = stack.pop.trunc.int
-    let b = stack.pop.trunc.int
+    let a = stack.pop
+    let b = stack.pop
     let x = divmod(b, a)
-    stack.push(x[0].toFloat)
+    stack.push(x[0])
   except DivByZeroDefect:
     error("division by zero")
     memDump()
@@ -294,11 +263,11 @@ proc divint =
   
 proc divrem = 
   try:
-    let a = stack.pop.trunc.int
-    let b = stack.pop.trunc.int
+    let a = stack.pop
+    let b = stack.pop
     let x = divmod(b, a)
-    stack.push(x[1].toFloat)
-    stack.push(x[0].toFloat)
+    stack.push(x[1])
+    stack.push(x[0])
   except DivByZeroDefect:
     error("division by zero")
     memDump()
@@ -320,10 +289,10 @@ proc divide =
 
 proc modulus = 
   try:
-    let a = stack.pop.trunc.int
-    let b = stack.pop.trunc.int
+    let a = stack.pop
+    let b = stack.pop
     let x = divmod(b, a)
-    stack.push(x[1].toFloat)
+    stack.push(x[1])
   except DivByZeroDefect:
     error("division by zero")
   except:
@@ -355,23 +324,23 @@ proc bsl =
   try:
     let times = stack.pop
     let x = stack.pop
-    stack.push((x.trunc.int shl times.trunc.int).toFloat)
+    stack.push(shift(x, times))
   except:
     error("less than two numbers on stack")
     memDump()
 
 proc bsr =
   try:
-    let times = stack.pop
+    let times = stack.pop * -1
     let x = stack.pop
-    stack.push((x.trunc.int shr times.trunc.int).toFloat)
+    stack.push(shift(x, times))
   except:
     error("less than two numbers on stack")
     memDump()
 
 proc trunc =
   try:
-    stack.push(trunc(stack.pop))
+    stack.push(truncate(stack.pop))
   except:
     error("nothing on stack to truncate")
 
@@ -403,23 +372,11 @@ proc drop =
 
 proc rot =
   try:
-    let c = stack.pop
-    let b = stack.pop
     let a = stack.pop
-    stack.push(b)
-    stack.push(c)
-    stack.push(a)
-  except:
-    error("less than three numbers on stack")
-    memDump()
-
-proc unrot =
-  try:
-    let a = stack.pop
-    let c = stack.pop
     let b = stack.pop
-    stack.push(a)
+    let c = stack.pop
     stack.push(b)
+    stack.push(a)
     stack.push(c)
   except:
     error("less than three numbers on stack")
@@ -531,9 +488,9 @@ proc rpop =
 
 proc rcmp =
   try:
-    if almostEqual(stack.peek, rstack.peek):
-      stack.push(1.0)
-    else: stack.push(0.0)
+    if stack.peek == rstack.peek:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
     error("cannot compare stack and rstack if either is empty")
     memDump()
@@ -660,7 +617,7 @@ proc questionElse =
     error("less than two quotes on qstack")
     memDump()
   try:
-    if stack.pop > 0.3:
+    if stack.pop > 0:
       discard qstack.pop
       executeQuote(qstack.pop)
     else:
@@ -675,8 +632,8 @@ proc gt =
   try:
     let lower = stack.pop
     if stack.peek > lower:
-      stack.push(1.0)
-    else: stack.push(0.0)
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
     error("nothing on stack to compare")
     memDump()
@@ -685,17 +642,17 @@ proc gteq =
   try:
     let lower = stack.pop
     if stack.peek >= lower:
-      stack.push(1.0)
-    else: stack.push(0.0)
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
     error("nothing on stack to compare")
     memDump()
 
 proc gt0 =
   try:
-    if stack.peek > 0.0:
-      stack.push(1.0)
-    else: stack.push(0.0)
+    if stack.peek > 0:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
     error("nothing on stack to compare")
     memDump()
@@ -704,8 +661,8 @@ proc lt =
   try:
     let higher = stack.pop
     if stack.peek < higher:
-      stack.push(1.0)
-    else: stack.push(0.0)
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
     error("nothing on stack to compare")
     memDump()
@@ -713,45 +670,45 @@ proc lt =
 proc lteq =
   try:
     let higher = stack.pop
-    if stack.peek < higher or almostEqual(stack.peek, higher):
-      stack.push(1.0)
-    else: stack.push(0.0)
+    if stack.peek <= higher:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
     error("nothing on stack to compare")
     memDump()
 
 proc lt0 =
   try:
-    if stack.peek < 0.0:
-      stack.push(1.0)
-    else: stack.push(0.0)
+    if stack.peek < 0:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
     error("nothing on stack to compare")
     memDump()
 
 proc eq =
   try:
-    if almostEqual(stack.pop - stack.peek, 0):
-      stack.push(1.0)
-    else: stack.push(0.0)
+    if stack.pop - stack.peek == 0:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
     error("less than two values on stack")
     memDump()
 
 proc eq0 =
   try:
-    if almostEqual(stack.peek, 0):
-      stack.push(1.0)
-    else: stack.push(0.0)
+    if stack.peek == 0:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
     error("nothing on stack to compare")
     memDump()
 
 proc land() =
   try:
-    if almostEqual(stack.pop + stack.pop, 2):
-      stack.push(1)
-    else: stack.push(0)
+    if stack.pop + stack.pop == 2:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
     error("less than two values on stack")
     memDump()
@@ -759,27 +716,27 @@ proc land() =
 proc lor() =
   try:
     let t = stack.pop + stack.pop
-    if almostEqual(t, 1) or almostEqual(t, 2):
-      stack.push(1.0)
-    else: stack.push(0.0)
+    if t == 1 or t == 2:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
     error("less than two values on stack")
     memDump()
   
 proc lxor() =
   try:
-    if almostEqual(stack.pop + stack.pop, 1):
-      stack.push(1.0)
-    else: stack.push(0.0)
+    if stack.pop + stack.pop == 1:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
     error("less than two values on stack")
     memDump()
 
 proc linv =
   try:
-    if almostEqual(stack.pop, 0):
-      stack.push(1.0)
-    else: stack.push(0.0)
+    if stack.pop == 0:
+      stack.push(newDecimal(1))
+    else: stack.push(newDecimal(0))
   except:
     error("nothing on stack")
     memDump()
@@ -819,12 +776,12 @@ proc array =
     if buffer[tokenPtr] == "]":
       return
     var f : float
-    var arrayContents : seq[float]
+    var arrayContents : seq[DecimalType]
     var endArray = false
     while not endArray:
       if buffer[tokenPtr].len > 0:
         if scanf(buffer[tokenPtr], "$f", f):
-          arrayContents.add(parseFloat(buffer[tokenPtr]))
+          arrayContents.add(newDecimal(buffer[tokenPtr]))
         else:
           raise newException(ArithmeticDefect, "arithmetic error")
       tokenPtr += 1
@@ -843,7 +800,7 @@ proc array2d =
   let width = popInt()
   let height = popInt()
   let name = sstack.pop.strip
-  named2dArrays[name] = newSeqWith(height, newSeq[0.0](width))
+  named2dArrays[name] = newSeqWith(height, newSeq[newDecimal(0)](width))
   if not noLog:
     info(fmt"""2d array of size {width}, {height} created at "{name}"""")
 
@@ -862,27 +819,12 @@ proc atArrayIndex =
     memDump()
 
 proc atArray2dIndex =
-  var i, j : int
-  var name : string
-  try:
-    j = popInt()
-    i = popInt()
-    name = sstack.peek
-    if j < named2dArrays[name].len and j >= 0:
-      if i < named2dArrays[name][j].len and j >= 0:
-        stack.push(named2dArrays[name][j][i])
-      else:
-        error(fmt"""index {i} not in {name}[{j}]""")
-        info(fmt"""token index: {tokenPtr}""")
-        memDump()
-    else:
-      error(fmt"""index {j} not in {name}""")
-      info(fmt"""token index: {tokenPtr}""")
-      memDump()
-  except:
-    error(fmt"""cannot retrieve value at {name}[{j}][{i}]""")
-    info(fmt"""token index: {tokenPtr}""")
-    memDump()
+  echo named2dArrays
+  let j = popInt()
+  let i = popInt()
+  let name = sstack.peek
+  let value = named2dArrays[name][j][i]
+  stack.push(value)
 
 proc toArray =
   try:
@@ -904,22 +846,13 @@ proc fromArray =
 
 proc arrayCmp =
   try:
-    var xyEqual = true
-    let x = astack.pop.toSeq
-    let y = astack.pop.toSeq
-    if x.len != y.len:
-      xyEqual = false
+    let aTop = astack.pop
+    let a2nd = astack.pop
+    if aTop.toSeq == a2nd.toSeq:
+      stack.push(newDecimal(1))
     else:
-      var i = 0
-      while i < x.len:
-        if not almostEqual(x[i], y[i]):
-          xyEqual = false
-        i += 1
-    if xyEqual:
-      stack.push(1.0)
-    else:
-      stack.push(0.0)
-    astack.push(y)
+      stack.push(newDecimal(0))
+    astack.push(a2nd)
   except:
     error("cannot compare arrays, must have at least two arrays loaded onto array stack")
     memDump()
@@ -928,10 +861,10 @@ proc arrayClear =
   astack.clear
 
 proc array2dFill =
-  let value = stack.pop
   let name = sstack.pop
-  var j = named2dArrays[name].len - 1
-  var i = named2dArrays[name][0].len - 1
+  let value = stack.pop
+  var j = int(named2dArrays[name].len - 1)
+  var i = int(named2dArrays[name][0].len - 1)
   let iMax = i
   while j >= 0:
     while i >= 0:
@@ -992,44 +925,11 @@ proc word =
 proc cmd =
   try:
     var result = execCmdEx(sstack.pop)
-    stack.push(toFloat(result[1]))
+    stack.push(newDecimal(result[1]))
     echo result[0]
     echo fmt"Exit code: {result[1]}"
   except:
     warning("could not execute command or nothing on string stack")
-
-proc openFile =
-  outputFile = newFileStream(sstack.pop, fmWrite)
-
-proc closeFile =
-  outputFile.close
-
-proc fWriteLn =
-  outputFile.writeLine(sstack.pop)
-
-proc toString =
-  let n = stack.pop
-  if almostEqual(n, n.trunc):
-    sstack.push($(n.toInt))
-  else: sstack.push($n)
-
-proc concatenate =
-  let s2 = sstack.pop
-  let s1 = sstack.pop
-  sstack.push(s1 & s2)
-
-proc clearStack =
-  stack.clear
-
-proc stringToDReg =
-  dreg = sstack.pop
-
-proc dRegToString =
-  sstack.push(dreg)
-  dreg = ""
-
-proc stringLength =
-  stack.push(sstack.peek.len.toFloat)
 
 proc stackDump(s : Stack) =
   var i : int = 0
@@ -1069,7 +969,7 @@ proc memClear =
   astack.clear()
   
 proc popInt : int =
-  return stack.pop.toInt
+  return parseInt($stack.pop.truncate)
   
 proc executeQuote(q : string) =
   let returnPtr = tokenPtr
@@ -1093,7 +993,7 @@ proc executeQuote(q : string) =
 proc parseToken(token : string) =
   var x : int
   if scanf(token, "$i", x):
-    let d = parseFloat(token)
+    let d = newDecimal(token)
     stack.push(d)
   else:
     if token.len > 0:
@@ -1121,7 +1021,6 @@ proc parseToken(token : string) =
         of "dup": dup()
         of "drop": drop()
         of "rot": rot()
-        of "-rot": unrot()
         of "swap": swap()
         of "over": over()
         of "pick": pick()
@@ -1144,7 +1043,7 @@ proc parseToken(token : string) =
         of "defer": deferex()
         of "dex": dex()
         of "?": question()
-        of "?:": questionElse()
+        of "?:": questionelse()
         of ">": gt()
         of ">=": gteq()
         of ">0": gt0()
@@ -1153,7 +1052,7 @@ proc parseToken(token : string) =
         of "<0": lt0()
         of "=": eq()
         of "=0": eq0()
-        of "&&": land()
+        of "&": land()
         of "|": lor()
         of "x|": lxor()
         of "!": linv()
@@ -1174,15 +1073,6 @@ proc parseToken(token : string) =
         of "var": variable()
         of "proc": word()
         of "cmd": cmd()
-        of "file": openFile()
-        of "close": closeFile()
-        of "fwriteln": fWriteLn()
-        of "to$": toString()
-        of "&": concatenate()
-        of "clear": clearStack()
-        of "$>d": stringToDReg()
-        of "d>$": dRegToString()
-        of "$len": stringLength()
         of "memclear": memClear()
         of "memdump": memDump()
         of "include": incl()
@@ -1338,14 +1228,7 @@ if isMainModule:
     case params[0]:
     of "debug":
       debug = true
-      try:
-        interpret(params[1])
-      except IndexDefect:
-        error(fmt"index defect at tokenPtr: {tokenPtr}")
-        memDump()
-        
-      except:
-        error("unknown interpretation error")
+      interpret(params[1])
     of "noLog":
       noLog = true
       interpret(params[1])

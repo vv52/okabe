@@ -1,0 +1,29 @@
+"examples/raych2.ok" include
+
+"tick" (
+  projPos projVel tAdd4 "projPos" store
+  envGravity envWind tAdd4
+  projVel tAdd4 norm "projVel" store
+  @clear
+) proc
+
+"velocity ← normalize(vector(1, 1.8, 0)) * 11.25" $
+"p ← projectile(start, velocity)" $
+"gravity ← vector(0, -0.1, 0)" $
+"wind ← vector(-0.01, 0, 0)" $
+"e ← environment(gravity, wind)" $
+"c ← canvas(900, 550)" $
+ 1    1.8 0 vec norm "projVel"    store
+ 0    1   0 point    "projPos"    store
+ 0   -0.1 0 vec      "envGravity" store
+-0.01 0   0 vec      "envWind"    store
+1 0 0 "pathColor" color
+90 50 initCanvas
+0 >r
+( tick projPos y @ top >0
+  ( r> ++ >r dex )
+  ( "done" $
+    "ticks:" $ r> . )
+  ?:
+) defer dex memclear
+writeCanvasToPPMSafe

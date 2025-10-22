@@ -1,1 +1,2 @@
-"nim c -d:release --app:console --project --hints:on --warnings:on --styleCheck:hint okabe.nim" cmd
+# "nim c -d:release --app:console --project --hints:on --warnings:on --styleCheck:error okabe.nim" cmd
+"nim c -d:nimCallDepthLimit=20000 --app:console --project --hints:on --warnings:on --styleCheck:error okabe.nim" cmd

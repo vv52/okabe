@@ -1,32 +1,29 @@
 "examples/raych1.ok" include
 
-0 1 0 point "projPos" store
-1 1 0 vec norm "projVel" store
-0 -0.1 0 vec "envGravity" store
--0.01 0 0 vec "envWind" store
-
-"proj" (
-  projPos
-  projVel
-) proc
-
-"env" (
-  envGravity
-  envWind
-) proc
-
 "tick" (
   projPos projVel tAdd4 "projPos" store
   envGravity envWind tAdd4
   projVel tAdd4 norm "projVel" store
+  @clear
 ) proc
 
-# projectile starts one unit above the origin. 
-# velocity is normalized to 1 unit/tick. 
+private
+
 "p ← projectile(point(0, 1, 0), normalize(vector(1, 1, 0)))" $
-proj
-# gravity -0.1 unit/tick, and wind is -0.01 unit/tick. 
-"e ← environment(vector(0, -0.1, 0), vector(-0.01, 0, 0)) Then, run tick repeatedly until the projectile’s y position is less than or equal to 0. Report the projectile’s position after each tick, and the number of ticks it takes for the projectile to hit the ground." $
-env
+ 0 1 0 point    "projPos" store
+ 1 1 0 vec norm "projVel" store
+
+"Gravity -0.1 unit/tick, and wind is -0.01 unit/tick." $
+"e ← environment(vector(0, -0.1, 0), vector(-0.01, 0, 0))" $
+ 0   -0.1 0 vec "envGravity" store
+-0.01 0   0 vec "envWind"    store
+
 "Projectile simulation: " $
-( projPos y @ top >0 ( tick ' ) ( "Projectile has landed" $ ) ?: ) '
+0 >r
+( tick projPos y @ >0
+  ( top r> ++ >r ' )
+  ( "done" $
+    "y pos:" $ .
+    "ticks:" $ r> . )
+  ?:
+) ' @clear
