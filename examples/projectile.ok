@@ -21,7 +21,8 @@ private
 "Projectile simulation: " $
 0 >r
 ( tick projPos y @ >0
-  ( top r> ++ >r ' )
+  ( top clear
+    r> ++ >r ' )
   ( "done" $
     "y pos:" $ .
     "ticks:" $ r> . )

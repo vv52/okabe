@@ -12,6 +12,20 @@ import stacks
       # "$_" possible alias for "fwriteln"
       # ".$" possible alias for "to$ $"
 
+type
+  OkAnyType = object
+    s : string
+    n : float
+    a : seq[OkAnyType]
+  MemoryState = object
+    # returnPtr : int
+    # bufferSwap : seq[string]
+    stackSwap : Stack[float]
+    rstackSwap : Stack[float]
+    sstackSwap : Stack[string]
+    qstackSwap : Stack[string]
+    dregSwap : string
+
 var docs = newStringTable()
 
 proc dump() : void
@@ -159,6 +173,8 @@ proc variable : void
 docs["var"] = "$( k -- ) ( v -- ) stores v at k"
 proc word() : void
 docs["proc"] = "$( s -- ) ()( q -- ) make new word from top of string stack that does top of qstack"
+proc safeWord() : void
+docs["safeproc"] = "$( s -- ) ()( q -- ) make new Word from top of string stack that freezes memory, does top of qstack, and unfreezes memory, essentially creating a containerized procedure"
 proc cmd() : void
 docs["cmd"] = "$( s -- ) ( -- e ) pop string stack and exec in shell, push exit code to stack and echo output"
 proc openFile() : void
@@ -180,6 +196,8 @@ docs["d>$"] = "$d[ s -- ] $( -- s ) pushes dreg to $stack snd clears dreg"
 proc stringLength() : void
 docs["$len"] = "$( s -- s ) ( -- s.len)"
 proc stackDump(s : Stack) : void
+proc freeze() : void
+proc unfreeze() : void
 proc memDump() : void
 proc memClear() : void
 proc popInt() : int
@@ -202,11 +220,13 @@ var noLog = false
 var helpMode = false
 var interpreting = false
 var including = false
+var executingQuote = false
+var stopQuote : int = -1
 
 var stack = newStack[float](capacity = 64)     # THE stack
 var rstack = newStack[float](capacity = 64)    # rstack for forth algs
 var sstack = newStack[string](capacity = 64) # stack for string literals
-var qstack = newStack[string](capacity = 64) # stack for quoted code in conditionals and processes
+var qstack = newStack[string](capacity = 64) # stack for quoted code in conditionals and procedures
 var astack = newStack[seq[float]](capacity = 16)
 
 var dreg : string
@@ -214,6 +234,8 @@ var buffer : seq[string]
 var ifbuffer : string
 var iftokens : seq[string]
 # var ofbuffer : string
+
+var memoryStateSwap : MemoryState
 
 var procs = newStringTable()
 var vars = initTable[string, float]()
@@ -989,12 +1011,32 @@ proc word =
     error("could not create proc")
     memDump()
 
+proc safeWord =
+  try:
+    discard sstack.peek
+  except:
+    error("no proc name provided; nothing on $stack")
+    memDump()
+  try:
+    discard qstack.peek
+  except:
+    error("cannot declare proc without quote body; nothing on qstack")
+    memDump()
+  try:
+    let name = sstack.pop.strip
+    procs[name] = fmt"freeze {qstack.pop} unfreeze"
+    if not noLog:
+      info(fmt"""{name} created""")
+  except:
+    error("could not create proc")
+    memDump()
+
 proc cmd =
   try:
     var result = execCmdEx(sstack.pop)
     stack.push(toFloat(result[1]))
     echo result[0]
-    echo fmt"Exit code: {result[1]}"
+    info(fmt"Exit code: {result[1]}")
   except:
     warning("could not execute command or nothing on string stack")
 
@@ -1039,6 +1081,28 @@ proc stackDump(s : Stack) =
     echo fmt"  {i}  |   {$item}"
     i += 1
 
+proc freeze =
+  memoryStateSwap = MemoryState(
+    # returnPtr : tokenPtr,
+    # bufferSwap : buffer,
+    stackSwap : stack,
+    rstackSwap : rstack,
+    sstackSwap : sstack,
+    qstackSwap : qstack,
+    dregSwap : dreg
+  )
+  memClear()
+
+proc unfreeze =
+    memClear()
+    # tokenPtr = memoryStateSwap.returnPtr
+    # buffer = memoryStateSwap.bufferSwap
+    stack = memoryStateSwap.stackSwap
+    rstack = memoryStateSwap.rstackSwap
+    sstack = memoryStateSwap.sstackSwap
+    qstack = memoryStateSwap.qstackSwap
+    dreg = memoryStateSwap.dregSwap
+
 proc memDump =  
   if not stack.isEmpty:
     echo "\nSTACK"
@@ -1072,23 +1136,29 @@ proc popInt : int =
   return stack.pop.toInt
   
 proc executeQuote(q : string) =
-  let returnPtr = tokenPtr
   let tokens : seq[string] = q.split(parseRule)
-  let bufferBackup = buffer
-  buffer = tokens
-  tokenPtr = 0
-  while tokenPtr < tokens.len:
-    let token = tokens[tokenPtr]
-    if token.len > 0:
-      if debug:
-        echo fmt"""({tokenPtr}) {token}"""
-        # memDump()
-      parseToken(token)
-    tokenPtr += 1
-  tokenPtr = returnPtr
-  if interpreting:
-    buffer = iftokens
-  buffer = bufferBackup
+  if not executingQuote:
+    stopQuote = tokens.len
+    executingQuote = true
+    let returnPtr = tokenPtr
+    let bufferBackup = buffer
+    buffer = tokens
+    tokenPtr = 0
+    while tokenPtr < stopQuote:
+      let token = buffer[tokenPtr]
+      if token.len > 0:
+        if debug:
+          echo fmt"""({tokenPtr}) {token}"""
+        parseToken(token)
+      tokenPtr += 1
+    tokenPtr = returnPtr
+    if interpreting:
+      buffer = iftokens
+    buffer = bufferBackup
+    executingQuote = false
+  else:
+    buffer.insert(tokens, tokenPtr + 1)
+    stopQuote = buffer.len
 
 proc parseToken(token : string) =
   var x : int
@@ -1173,6 +1243,7 @@ proc parseToken(token : string) =
         of "store2d": store2d()
         of "var": variable()
         of "proc": word()
+        of "safeproc": safeWord()
         of "cmd": cmd()
         of "file": openFile()
         of "close": closeFile()
@@ -1183,6 +1254,8 @@ proc parseToken(token : string) =
         of "$>d": stringToDReg()
         of "d>$": dRegToString()
         of "$len": stringLength()
+        of "freeze": freeze()
+        of "unfreeze": unfreeze()        
         of "memclear": memClear()
         of "memdump": memDump()
         of "include": incl()
@@ -1283,8 +1356,8 @@ proc interpret(file : string) =
   let tokens : seq[string] = iftokens
   buffer = iftokens
   tokenPtr = 0
-  while tokenPtr < tokens.len:
-    let token = tokens[tokenPtr]
+  while tokenPtr < buffer.len:
+    let token = buffer[tokenPtr]
     if token.len > 0:
       if helpMode:
         helpMode = false

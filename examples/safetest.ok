@@ -1,0 +1,3 @@
+"test" ( freeze 420 >@ clear @> . . unfreeze ) proc
+
+69 test . .

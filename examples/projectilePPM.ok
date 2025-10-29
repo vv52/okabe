@@ -4,8 +4,7 @@
   projPos projVel tAdd4 "projPos" store
   envGravity envWind tAdd4
   projVel tAdd4 norm "projVel" store
-  @clear
-) proc
+) safeproc
 
 "velocity ← normalize(vector(1, 1.8, 0)) * 11.25" $
 "p ← projectile(start, velocity)" $
@@ -18,12 +17,17 @@
  0   -0.1 0 vec      "envGravity" store
 -0.01 0   0 vec      "envWind"    store
 1 0 0 "pathColor" color
-90 50 initCanvas
+24 12 initCanvas
+
 0 >r
-( tick projPos y @ top >0
-  ( r> ++ >r dex )
+( tick projPos x @ top y @ top >0
+  ( pathColor writePixel
+    clear @clear
+    r> ++ >r ' )
   ( "done" $
+    "y pos:" $ .
     "ticks:" $ r> . )
   ?:
-) defer dex memclear
+) ' @clear
+
 writeCanvasToPPMSafe
